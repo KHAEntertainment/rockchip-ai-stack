@@ -8,7 +8,7 @@ torch>=2.3.0
 torchvision>=0.18.0
 
 # Image handling
-Pillow>=10.3.0
+Pillow>=12.1.1
 
 # ONNX Runtime — CLIP vision encoder CPU path
 onnxruntime>=1.18.0

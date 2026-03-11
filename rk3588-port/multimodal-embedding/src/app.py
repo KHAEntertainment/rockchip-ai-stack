@@ -328,6 +328,12 @@ async def create_embedding(request: EmbeddingRequest) -> dict:
                     frames.append(await download_image(frame.image_url))
                 elif frame.type == "image_base64":
                     frames.append(decode_base64_image(frame.image_base64))
+                else:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Unknown video_frames item type: {frame.type!r}. "
+                               "Expected 'image_url' or 'image_base64'.",
+                    )
             embedding = embedding_model.get_video_embeddings([frames])
 
         elif input_data.type == "video_url":
@@ -356,8 +362,24 @@ async def create_embedding(request: EmbeddingRequest) -> dict:
                     status_code=400,
                     detail="Video inputs are not supported by the active model",
                 )
+            # Reject paths that escape the configured base directory to prevent
+            # arbitrary local file reads via a user-controlled video_path.
+            import os as _os
+            from pathlib import Path as _Path
+            _base = _Path(getattr(settings, "VIDEO_BASE_DIR", "/tmp")).resolve()
+            _requested = _Path(input_data.video_path).resolve()
+            try:
+                _requested.relative_to(_base)
+            except ValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"video_path must be inside the configured base directory "
+                        f"({_base}). Received: {input_data.video_path!r}"
+                    ),
+                )
             embedding = await embedding_model.get_video_embedding_from_file(
-                input_data.video_path, input_data.segment_config
+                str(_requested), input_data.segment_config
             )
 
         elif input_data.type == "frames_batch":

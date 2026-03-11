@@ -146,7 +146,10 @@ class LocalFileStore:
         if object_name is None:
             object_name = self.get_destination_file(file_name)
 
-        # UploadFile.file is a SpooledTemporaryFile-like — read synchronously.
+        # UploadFile.file is a SpooledTemporaryFile-like — rewind then read
+        # synchronously so that callers who already partially consumed the
+        # stream can still obtain the full contents.
+        file_object.file.seek(0)
         data = file_object.file.read()
         self.put_object(bucket, object_name, data)
         logger.info(f"LocalFileStore: uploaded {file_name} → {bucket}/{object_name}")

@@ -69,6 +69,9 @@ class TranscriptionService:
         """
         Determine which backend to use based on device type.
 
+        The explicit *device* parameter passed to __init__ takes priority.
+        Only when no explicit device was given is DEFAULT_BACKEND consulted.
+
         On RK3588 the only working day-1 backend is whisper_cpp (CPU).
         The RKNN_NPU backend is a TODO stub.
 
@@ -76,6 +79,11 @@ class TranscriptionService:
             The appropriate transcription backend
         """
         logger.debug("Determining appropriate transcription backend")
+
+        # Honour explicit device selection before consulting the env setting.
+        if self.device_type == DeviceType.CPU:
+            logger.info("Explicit CPU device requested — using whisper_cpp backend")
+            return TranscriptionBackend.WHISPER_CPP
 
         # Read an optional override from environment / settings
         backend_env = getattr(settings, "DEFAULT_BACKEND", "whisper_cpp")

@@ -295,6 +295,8 @@ def ingest_to_lancedb(doc_path: Path, bucket: str) -> None:
                         embedding=np.array(emb, dtype=np.float32),
                         source_path=source_path,
                         ingested_at=now,
+                        bucket=bucket,
+                        doc_filename=doc_path.name,
                     )
                 )
 
@@ -347,24 +349,23 @@ async def delete_embeddings(
         table = get_or_create_table(db, config.COLLECTION_NAME)
 
         if delete_all:
-            # Delete all rows whose JSON metadata contains this bucket.
-            # LanceDB filter uses SQL-like syntax; we search inside the JSON string.
+            # Use top-level `bucket` column — no brittle JSON substring matching.
             escaped_bucket = bucket_name.replace("'", "''")
             before = table.count_rows()
-            table.delete(f"metadata LIKE '%\"bucket\": \"{escaped_bucket}\"%'")
+            table.delete(f"bucket = '{escaped_bucket}'")
             after = table.count_rows()
             deleted = before - after
             logger.info(f"Deleted {deleted} rows for bucket '{bucket_name}'")
             return True
 
         elif file_name:
-            # Delete rows whose metadata filename matches AND bucket matches.
+            # Use top-level `bucket` and `doc_filename` columns.
             escaped_bucket = bucket_name.replace("'", "''")
             escaped_filename = file_name.replace("'", "''")
             before = table.count_rows()
             table.delete(
-                f"metadata LIKE '%\"filename\": \"{escaped_filename}\"%' "
-                f"AND metadata LIKE '%\"bucket\": \"{escaped_bucket}\"%'"
+                f"bucket = '{escaped_bucket}' "
+                f"AND doc_filename = '{escaped_filename}'"
             )
             after = table.count_rows()
             deleted = before - after

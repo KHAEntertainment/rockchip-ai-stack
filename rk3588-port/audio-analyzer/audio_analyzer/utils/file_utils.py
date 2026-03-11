@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import time
 import traceback
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +12,8 @@ from fastapi import UploadFile
 
 from audio_analyzer.core.settings import settings
 from audio_analyzer.utils.logger import logger
+
+_UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1 MiB
 
 
 async def save_upload_file(file: UploadFile, upload_dir: Optional[Path] = None) -> Path:
@@ -40,18 +42,21 @@ async def save_upload_file(file: UploadFile, upload_dir: Optional[Path] = None) 
         logger.debug(f"Error details: {traceback.format_exc()}")
         raise RuntimeError(f"Failed to create upload directory: {e}")
 
-    # Create a unique filename with timestamp
-    timestamp = int(time.time())
-    safe_filename = f"{timestamp}_{file.filename.replace(' ', '_')}"
+    # Use UUID prefix to prevent filename collisions within the same second
+    unique_prefix = uuid.uuid4().hex
+    safe_filename = f"{unique_prefix}_{file.filename.replace(' ', '_')}"
     file_path = upload_dir / safe_filename
     logger.debug(f"Generated safe filename: {safe_filename}")
 
-    # Save the file
+    # Save the file in fixed-size chunks to avoid loading large files into RAM
     try:
         logger.debug(f"Writing file content to: {file_path}")
         async with aiofiles.open(file_path, "wb") as f:
-            content = await file.read()
-            await f.write(content)
+            while True:
+                chunk = await file.read(_UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                await f.write(chunk)
         logger.info(f"File saved successfully: {file_path}")
 
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
@@ -78,7 +83,7 @@ def get_file_duration(file_path: Path) -> float:
     logger.debug(f"Getting duration of file: {file_path}")
 
     try:
-        from moviepy import VideoFileClip
+        from moviepy.editor import VideoFileClip
 
         with VideoFileClip(str(file_path)) as clip:
             duration = clip.duration

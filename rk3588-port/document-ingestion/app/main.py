@@ -146,20 +146,32 @@ async def ingest_document(
                         detail="Some unknown error occurred. Please try later!",
                     )
 
-                # Ingest into LanceDB
+                # Ingest into LanceDB — roll back the stored file on failure
+                # to keep the object store and vector store in sync.
+                temp_path: Path | None = None
                 try:
-                    temp_path: Path = await save_temp_file(
+                    temp_path = await save_temp_file(
                         file, bucket_name, uploaded_filename
                     )
                     logger.info(f"Temporary path of saved file: {temp_path}")
                     ingest_to_lancedb(doc_path=temp_path, bucket=bucket_name)
                 except Exception as e:
+                    # Remove the file that was already written to the store so
+                    # it does not become an orphan without matching embeddings.
+                    try:
+                        DataStore.remove_object(bucket_name, uploaded_filename)
+                        logger.info(
+                            f"Rolled back stored file {uploaded_filename} "
+                            "after ingestion failure"
+                        )
+                    except Exception as rb_exc:
+                        logger.warning(f"Rollback failed: {rb_exc}")
                     raise HTTPException(
                         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                         detail=f"Unexpected error while ingesting data. Exception: {e}",
                     )
                 finally:
-                    if "temp_path" in locals():
+                    if temp_path is not None:
                         Path(temp_path).unlink(missing_ok=True)
                         logger.info("Temporary file cleaned up!")
 
@@ -239,7 +251,6 @@ async def download_documents(
     bucket_name: Annotated[
         str, BeforeValidator(Validation.sanitize_input), Query(min_length=3)
     ] = config.DEFAULT_BUCKET,
-):
 ):
     """Return a stored document as a streaming download."""
     try:

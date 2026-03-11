@@ -6,7 +6,6 @@ import logging
 
 import lancedb
 from langchain_community.vectorstores import LanceDB as LangChainLanceDB
-from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import (
@@ -127,7 +126,6 @@ logging.info(f"Using LLM inference backend: {LLM_BACKEND}")
 # RERANKER_ENDPOINT_URL is the base URL; append /rerank for the POST endpoint.
 RERANKER_ENDPOINT = settings.RERANKER_ENDPOINT_URL.rstrip("/") + "/rerank"
 
-callbacks = [StreamingStdOutCallbackHandler()]
 
 
 # ---------------------------------------------------------------------------
@@ -221,8 +219,13 @@ async def process_chunks(conversation_messages, max_tokens):
     else:
         history = ""
 
-    # Raise ValueError if question is empty or only whitespace.
-    question_text = conversation_messages[-1].content
+    # Guard: require at least one message and a non-empty last message.
+    if not conversation_messages:
+        raise ValueError("conversation_messages must not be empty")
+    last_msg = conversation_messages[-1]
+    if not hasattr(last_msg, "content") or last_msg.content is None:
+        raise ValueError("Last message must have non-None content")
+    question_text = last_msg.content
     if not question_text or not question_text.strip():
         raise ValueError("Question text cannot be empty")
 
@@ -239,7 +242,6 @@ async def process_chunks(conversation_messages, max_tokens):
             top_p=0.99,
             temperature=0.01,
             streaming=True,
-            callbacks=callbacks,
             stop=["\n\n"],
         )
     else:
@@ -250,7 +252,6 @@ async def process_chunks(conversation_messages, max_tokens):
             top_p=0.99,
             temperature=0.01,
             streaming=True,
-            callbacks=callbacks,
             seed=settings.SEED,
             max_tokens=max_tokens,
         )
@@ -282,4 +283,7 @@ async def process_chunks(conversation_messages, max_tokens):
     }
 
     async for log in chain.astream(chain_input):
-        yield f"data: {log}\n\n"
+        # SSE requires each event on its own "data: ...\n\n" line;
+        # split multi-line LLM chunks to avoid breaking the stream format.
+        for line in str(log).split("\n"):
+            yield f"data: {line}\n\n"

@@ -18,7 +18,7 @@ from io import BytesIO
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -171,6 +171,11 @@ async def _expand_video_part(
                     image_url={"url": _pil_to_base64_png(pil_img)},
                 )
             )
+        if not image_parts:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Video URL produced zero frames; cannot forward request.",
+            )
         return image_parts
 
     if isinstance(part, MessageContentVideo):
@@ -184,13 +189,18 @@ async def _expand_video_part(
             )],
             max_frames=max_frames,
         ) if images else []
+        if not frames:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Video content produced zero frames; cannot forward request.",
+            )
         return [
             MessageContentImageUrl(
                 type="image_url",
                 image_url={"url": _pil_to_base64_png(frame)},
             )
             for frame in frames
-        ] or [part]  # fall back to original if no frames extracted
+        ]
 
     return [part]
 
@@ -215,28 +225,22 @@ async def _rewrite_messages_for_video(
     return rewritten
 
 
-def _build_forward_payload(request: ChatRequest, messages: List[ChatMessage]) -> Dict[str, Any]:
-    """Serialize *request* with the supplied messages into a plain dict for forwarding."""
-    payload: Dict[str, Any] = {
-        "model": request.model,
-        "messages": [m.model_dump(exclude_none=True) for m in messages],
-        "stream": request.stream or False,
-    }
-    optional_fields = [
-        "repetition_penalty",
-        "presence_penalty",
-        "frequency_penalty",
-        "max_completion_tokens",
-        "temperature",
-        "top_p",
-        "top_k",
-        "do_sample",
-        "seed",
-    ]
-    for field in optional_fields:
-        value = getattr(request, field, None)
-        if value is not None:
-            payload[field] = value
+def _build_forward_payload(
+    raw_body: Dict[str, Any],
+    rewritten_messages: Optional[List[ChatMessage]],
+) -> Dict[str, Any]:
+    """Build the forwarding payload from the raw request body.
+
+    When *rewritten_messages* is None the raw body is forwarded as-is (no
+    video rewriting was needed), preserving every field the upstream client
+    sent.  When video frames were extracted, only the ``messages`` key is
+    replaced so that all other original fields (vendor extensions, sampling
+    params, etc.) are still forwarded unchanged.
+    """
+    if rewritten_messages is None:
+        return dict(raw_body)
+    payload = dict(raw_body)
+    payload["messages"] = [m.model_dump(exclude_none=True) for m in rewritten_messages]
     return payload
 
 
@@ -289,15 +293,17 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     if "authorization" in request.headers:
         forward_headers["Authorization"] = request.headers["authorization"]
 
+    raw_body: Dict[str, Any] = await request.json()
+
     if _has_video_content(chat_request.messages):
         logger.info("Video content detected — extracting frames before forwarding")
-        messages = await _rewrite_messages_for_video(
+        rewritten = await _rewrite_messages_for_video(
             chat_request.messages, settings.max_video_frames
         )
     else:
-        messages = chat_request.messages
+        rewritten = None  # forward raw body unchanged
 
-    payload = _build_forward_payload(chat_request, messages)
+    payload = _build_forward_payload(raw_body, rewritten)
     is_streaming = bool(payload.get("stream"))
 
     if is_streaming:

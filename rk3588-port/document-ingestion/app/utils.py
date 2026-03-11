@@ -24,7 +24,7 @@ def check_tables_exist() -> bool:
     try:
         db = lancedb.connect(config.LANCEDB_PATH)
         return config.COLLECTION_NAME in db.table_names()
-    except Exception:
+    except (FileNotFoundError, OSError):
         return False
 
 

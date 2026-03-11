@@ -50,6 +50,7 @@ class CustomReranker:
             url=f"{self.reranking_endpoint}",
             json=request_body,
             headers={"Content-Type": "application/json"},
+            timeout=30.0,
         )
         if response.status_code == 200:
             res = response.json()

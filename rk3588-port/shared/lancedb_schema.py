@@ -34,6 +34,9 @@ DOCUMENT_SCHEMA = pa.schema(
         pa.field("embedding", pa.list_(pa.float32(), EMBEDDING_DIM)),
         pa.field("source_path", pa.string()),
         pa.field("ingested_at", pa.timestamp("us", tz="UTC")),
+        # Top-level columns for efficient deletes without JSON substring matching.
+        pa.field("bucket", pa.string()),             # logical bucket / collection name
+        pa.field("doc_filename", pa.string()),       # base filename (no path prefix)
     ]
 )
 
@@ -75,6 +78,8 @@ def get_or_create_table(
             ),
             "source_path": pa.array([], type=pa.string()),
             "ingested_at": pa.array([], type=pa.timestamp("us", tz="UTC")),
+            "bucket": pa.array([], type=pa.string()),
+            "doc_filename": pa.array([], type=pa.string()),
         }
     )
     return db.create_table(table_name, data=empty, schema=DOCUMENT_SCHEMA)
@@ -115,6 +120,8 @@ def make_document_row(
     embedding: np.ndarray,
     source_path: str,
     ingested_at: Optional[datetime] = None,
+    bucket: str = "",
+    doc_filename: str = "",
 ) -> dict:
     """Build a dict compatible with ``table.add([make_document_row(...)])``.
 
@@ -132,6 +139,11 @@ def make_document_row(
         Original file path or URL used during ingestion.
     ingested_at:
         UTC timestamp; defaults to now.
+    bucket:
+        Logical bucket name stored as a top-level column for efficient deletes.
+    doc_filename:
+        Base filename (no directory) stored as a top-level column for efficient
+        per-file deletes without JSON substring matching.
     """
     if ingested_at is None:
         ingested_at = datetime.now(tz=timezone.utc)
@@ -149,4 +161,6 @@ def make_document_row(
         "embedding": emb.tolist(),
         "source_path": source_path,
         "ingested_at": ingested_at,
+        "bucket": bucket,
+        "doc_filename": doc_filename,
     }

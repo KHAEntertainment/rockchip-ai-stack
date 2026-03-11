@@ -128,7 +128,7 @@ class BaseEmbeddingModel(ABC):
         """
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
-        return 512  # default; overridden by concrete handlers
+        return 2048  # default matches EMBEDDING_DIM in shared/lancedb_schema.py
 
     def preprocess_image(self, image: Union[Image.Image, np.ndarray]) -> torch.Tensor:
         """

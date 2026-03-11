@@ -1,5 +1,5 @@
 -r ../shared/requirements-base.txt
-Pillow>=10.3.0
+Pillow>=12.1.1
 decord>=0.6.0
 PyYAML>=6.0
 python-multipart>=0.0.9

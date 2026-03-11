@@ -90,10 +90,14 @@ async def lifespan(app: FastAPI):
         reranker.load()
         logger.info("Reranker loaded successfully (backend=%s)", backend_label)
     except NotImplementedError as exc:
-        # NPU path is a TODO stub — log and continue so the service starts.
+        # NPU path is a TODO stub — mark reranker as unavailable so /health
+        # returns 503 and /rerank returns a clear 503 error.
         logger.warning(
-            "Reranker load raised NotImplementedError (NPU stub): %s", exc
+            "Reranker load raised NotImplementedError (NPU stub): %s — "
+            "service will start in degraded state",
+            exc,
         )
+        reranker = None
     except Exception as exc:
         logger.exception("Failed to load reranker model: %s", exc)
         raise
@@ -148,6 +152,11 @@ class RerankResult(BaseModel):
 async def health():
     """Return service liveness status, active model name, and backend label."""
     backend = "rkllm_npu" if settings.use_npu else "cpu"
+    if reranker is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Reranker model is not loaded (degraded state). Check service logs.",
+        )
     return {"status": "ok", "model": settings.model_name, "backend": backend}
 
 

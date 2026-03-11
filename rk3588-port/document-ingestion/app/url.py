@@ -277,13 +277,15 @@ def ingest_url_to_lancedb(url_list: List[str]) -> dict:
             batch_size = config.BATCH_SIZE
             now = datetime.now(tz=timezone.utc)
 
+            # Accumulate all rows for this URL before a single table.add() so
+            # that a mid-ingestion embedding failure leaves no partial rows.
+            all_rows: list[dict] = []
             for i in range(0, len(chunks), batch_size):
                 batch_texts = chunks[i : i + batch_size]
                 embeddings: list[list[float]] = embedder.embed_documents(batch_texts)
 
-                rows = []
                 for text, emb in zip(batch_texts, embeddings):
-                    rows.append(
+                    all_rows.append(
                         make_document_row(
                             id=str(uuid.uuid4()),
                             content=text,
@@ -294,12 +296,13 @@ def ingest_url_to_lancedb(url_list: List[str]) -> dict:
                         )
                     )
 
-                table.add(rows)
-
                 logger.info(
-                    f"Processed batch {i // batch_size + 1}/"
+                    f"Embedded batch {i // batch_size + 1}/"
                     f"{(len(chunks) - 1) // batch_size + 1} for {url}"
                 )
+
+            table.add(all_rows)
+            logger.info(f"Committed {len(all_rows)} rows for {url}")
 
         except requests.exceptions.SSLError as e:
             logger.error(f"SSL Error while fetching {url}: {e}")
@@ -359,8 +362,12 @@ async def delete_embeddings_url(url: Optional[str], delete_all: bool = False) ->
                 )
             db = lancedb.connect(config.LANCEDB_PATH)
             table = get_or_create_table(db, config.COLLECTION_NAME)
-            # Delete all rows that have a "url" key in their metadata JSON.
-            table.delete("metadata LIKE '%\"url\"%'")
+            # Delete all rows whose source_path is one of the known URL values.
+            # Use exact equality on the top-level source_path column — no JSON
+            # substring matching needed because source_path == url for URL rows.
+            for stored_url in url_list:
+                escaped = stored_url.replace("'", "''")
+                table.delete(f"source_path = '{escaped}'")
             return True
 
         elif url:
@@ -370,7 +377,7 @@ async def delete_embeddings_url(url: Optional[str], delete_all: bool = False) ->
             db = lancedb.connect(config.LANCEDB_PATH)
             table = get_or_create_table(db, config.COLLECTION_NAME)
             escaped_url = url.replace("'", "''")
-            table.delete(f"metadata LIKE '%\"url\": \"{escaped_url}\"%'")
+            table.delete(f"source_path = '{escaped_url}'")
             return True
 
         else:

@@ -31,7 +31,7 @@ app.add_middleware(
 async def check_health(url: str, server_type: str):
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(url)
+            response = await client.get(url, timeout=5.0)
             if response.status_code == 200:
                 return {"status": "healthy", "details": f"{server_type} is ready to serve"}
             else:
@@ -40,12 +40,12 @@ async def check_health(url: str, server_type: str):
                     detail=f"{server_type} is not ready to accept connections, "
                            "please try after a few minutes",
                 )
-        except httpx.RequestError:
+        except httpx.RequestError as err:
             raise HTTPException(
                 status_code=503,
                 detail=f"{server_type} is not ready to accept connections, "
                        "please try after a few minutes",
-            )
+            ) from err
 
 
 async def check_server_health(host: str, server_type: str):

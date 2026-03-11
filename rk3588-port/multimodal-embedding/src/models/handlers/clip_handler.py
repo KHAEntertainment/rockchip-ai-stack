@@ -128,17 +128,10 @@ class CLIPHandler(BaseEmbeddingModel):
         # RKNN support is not yet wired up; otherwise loads ONNX on CPU).
         self._vision_model.load()
 
-        # Load open_clip text encoder + preprocessing on CPU.
-        # We use open_clip.create_model_and_transforms() only for preprocessing
-        # and the text encode path; the visual path is handled by _vision_model.
-        _, _, self.preprocess = open_clip.create_model_and_transforms(
-            self.model_name,
-            pretrained=self.pretrained,
-        )
-        # open_clip.create_model_and_transforms returns (model, preprocess_train, preprocess_val)
-        # We use index [2] which is the validation/inference preprocessor.
-        # Load a lightweight text-only model for the text encoding path.
-        self.model, _, _ = open_clip.create_model_and_transforms(
+        # Load open_clip text encoder + preprocessing on CPU in a single call.
+        # Returns (model, preprocess_train, preprocess_val); we use index [2]
+        # (the validation/inference preprocessor) and the model for text encoding.
+        self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             self.model_name,
             pretrained=self.pretrained,
         )

@@ -177,16 +177,19 @@ class EmbeddingModel:
         """Get video embedding from a URL."""
         if not self.handler.supports_video():
             raise RuntimeError("Video embeddings are not supported by the active model")
+        video_path = None
         try:
             logger.debug(f"Getting video embedding from URL: {video_url}")
             video_path = await download_video(video_url)
             clip_images = extract_video_frames(video_path, segment_config)
-            delete_file(video_path)
             logger.info("Video embedding extracted successfully from URL")
             return self.get_video_embeddings([clip_images])
         except Exception as e:
             logger.error(f"Error getting video embedding from URL: {e}")
             raise RuntimeError(f"Failed to get video embedding from URL: {e}")
+        finally:
+            if video_path is not None:
+                delete_file(video_path)
 
     def get_video_embedding_from_base64(
         self, video_base64: str, segment_config: dict = None
@@ -194,16 +197,19 @@ class EmbeddingModel:
         """Get video embedding from base64 encoded video."""
         if not self.handler.supports_video():
             raise RuntimeError("Video embeddings are not supported by the active model")
+        video_path = None
         try:
             logger.debug("Getting video embedding from base64")
             video_path = decode_base64_video(video_base64)
             clip_images = extract_video_frames(video_path, segment_config)
-            delete_file(video_path)
             logger.info("Video embedding extracted successfully from base64")
             return self.get_video_embeddings([clip_images])
         except Exception as e:
             logger.error(f"Error getting video embedding from base64: {e}")
             raise RuntimeError(f"Failed to get video embedding from base64: {e}")
+        finally:
+            if video_path is not None:
+                delete_file(video_path)
 
     async def get_video_embedding_from_file(
         self, video_path: str, segment_config: dict = None
@@ -364,10 +370,13 @@ class EmbeddingModel:
                             )
                             continue
                         try:
+                            # verify() closes the file; re-open and load pixels into
+                            # memory so the file handle is released before appending.
+                            with Image.open(image_path) as _check:
+                                _check.verify()
                             image = Image.open(image_path)
-                            image.verify()
-                            image = Image.open(image_path)
-                            images.append(image)
+                            image.load()
+                            images.append(image.copy())
                             valid_entries.append(metadata_entry)
                         except Exception as e:
                             logger.warning(
