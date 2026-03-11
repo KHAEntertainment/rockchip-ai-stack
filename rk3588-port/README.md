@@ -12,8 +12,9 @@
 
 ## What this is
 
-Seven microservices, originally written for Intel OpenVINO on x86, ported to run on
-**ARM64 boards powered by the Rockchip RK3588** (Radxa Rock 5C and equivalents).
+Ten components (microservices + a utility library), originally written for Intel OpenVINO on x86,
+ported or carried over as-is to run on **ARM64 boards powered by the Rockchip RK3588**
+(Radxa Rock 5C and equivalents).
 
 Every Intel-specific dependency — OpenVINO, openvino-genai, optimum-intel, Intel GPU
 drivers — has been replaced with hardware-neutral or RK3588-native alternatives.
@@ -80,6 +81,8 @@ Whisper transcription via whisper.cpp
 (RKNN stub)
 ```
 
+### Core RAG / inference stack
+
 | Service | Port | Description | Day-1 status |
 |---------|------|-------------|--------------|
 | `multimodal-embedding` | 8001 | Text/image embeddings; 2048-dim vectors | ✅ CPU |
@@ -89,6 +92,19 @@ Whisper transcription via whisper.cpp
 | `audio-analyzer` | 8002 | Whisper transcription | ✅ CPU |
 | `vlm-proxy` | 8082 | Video→frames proxy for llama-server | ✅ CPU |
 | `llama-server` | 8080 | LLM inference (external binary) | ✅ llama.cpp |
+
+### Additional services (no Intel deps — ported as-is)
+
+| Component | Port | Description | Day-1 status |
+|-----------|------|-------------|--------------|
+| `model-download` | 8084 | Download HuggingFace / Ollama models via REST API | ✅ CPU |
+| `multilevel-video-understanding` | 8085 | Video summarisation via VLM (OpenAI-compatible backend) | ✅ CPU |
+
+### Utility library
+
+| Library | Description |
+|---------|-------------|
+| `video-chunking-utils` | Scene-change and uniform video frame chunking (Python) |
 
 ---
 
@@ -209,6 +225,10 @@ rk3588-port/
 ├── chat-qa/                      # :8080
 ├── audio-analyzer/               # :8002
 ├── vlm-proxy/                    # :8082  (optional)
+│
+├── model-download/               # :8084  model hub downloader (HF / Ollama)
+├── multilevel-video-understanding/  # :8085  video summarisation
+├── video-chunking-utils/         # library — scene-change + uniform chunking
 │
 ├── INTEGRATION.md                # Startup order, env vars, smoke tests
 └── README.md                     # This file
