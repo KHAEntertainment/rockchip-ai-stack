@@ -1,0 +1,20 @@
+-r ../shared/requirements-base.txt
+
+# HuggingFace Transformers — Qwen CPU path
+transformers>=4.41.0
+
+# PyTorch — Qwen CPU path and CLIP text encoder
+torch>=2.3.0
+torchvision>=0.18.0
+
+# Image handling
+Pillow>=10.3.0
+
+# ONNX Runtime — CLIP vision encoder CPU path
+onnxruntime>=1.18.0
+
+# open_clip — CLIP text encoder + preprocessing
+open-clip-torch>=2.24.0
+
+# Video frame extraction
+decord>=0.6.0
