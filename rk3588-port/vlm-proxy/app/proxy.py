@@ -118,12 +118,18 @@ async def _expand_video_part(
     """
     if isinstance(part, MessageContentVideoUrl):
         url = part.video_url.get("url", "")
-        if url.startswith("data:video/") or "," in url:
-            # Base64-encoded video — save to disk first
+        if url.startswith("data:video/"):
+            # Inline base64-encoded video — decode to a temp file first.
             local_path = decode_and_save_video(url)
             video_url = local_path
-        else:
+        elif url.startswith("http://") or url.startswith("https://"):
+            # Remote video URL — pass through directly.
             video_url = url
+        else:
+            raise ValueError(
+                f"Unsupported video URL: only 'data:video/' and 'http(s)://' "
+                f"schemes are accepted, got {url[:80]!r}"
+            )
 
         # Use decord / pyav to decode the video into numpy arrays
         try:
@@ -235,23 +241,31 @@ def _build_forward_payload(request: ChatRequest, messages: List[ChatMessage]) ->
 
 
 async def _stream_response(
-    client: httpx.AsyncClient,
     url: str,
     payload: Dict[str, Any],
     upstream_headers: Dict[str, str],
 ) -> AsyncIterator[bytes]:
-    """Yield raw SSE bytes from llama-server without buffering."""
-    async with client.stream(
-        "POST",
-        url,
-        json=payload,
-        headers=upstream_headers,
-        timeout=None,
-    ) as response:
-        response.raise_for_status()
-        async for chunk in response.aiter_bytes():
-            if chunk:
-                yield chunk
+    """Yield raw SSE bytes from llama-server without buffering.
+
+    The AsyncClient is created and owned inside this generator so that it
+    stays alive for the full duration of the SSE stream, even after the
+    calling endpoint handler has returned the StreamingResponse.
+    """
+    client = httpx.AsyncClient()
+    try:
+        async with client.stream(
+            "POST",
+            url,
+            json=payload,
+            headers=upstream_headers,
+            timeout=None,
+        ) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    yield chunk
+    finally:
+        await client.aclose()
 
 
 # ---------------------------------------------------------------------------
@@ -286,17 +300,18 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     payload = _build_forward_payload(chat_request, messages)
     is_streaming = bool(payload.get("stream"))
 
-    async with httpx.AsyncClient() as client:
-        if is_streaming:
-            return StreamingResponse(
-                _stream_response(client, target_url, payload, forward_headers),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "X-Accel-Buffering": "no",
-                },
-            )
+    if is_streaming:
+        # _stream_response owns its own AsyncClient for the full SSE lifetime.
+        return StreamingResponse(
+            _stream_response(target_url, payload, forward_headers),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
+    async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
                 target_url,

@@ -41,6 +41,16 @@ _MODEL_CONFIG_CACHE: Dict[str, Dict[str, Any]] = {}
 # ---------------------------------------------------------------------------
 
 
+def load_local_image_trusted(path: Union[str, "Path"]) -> Image.Image:
+    """Open a local image file from a *trusted* internal path.
+
+    This helper exists for code paths where *path* has already been validated
+    by internal logic (e.g., a temp file written by ``decode_and_save_video``).
+    It must **never** be called with user-supplied input directly.
+    """
+    return Image.open(path).convert("RGB")
+
+
 def is_base64_image_data(value: str) -> bool:
     """Return True when *value* looks like a data-URI base64 image."""
     if not value:
@@ -137,7 +147,11 @@ async def load_images(
             elif is_base64_image_data(str(source)):
                 image = decode_base64_image(str(source))
             else:
-                image = Image.open(source).convert("RGB")
+                raise ValueError(
+                    f"Unsupported image source: expected an http(s) URL or "
+                    f"data-URI, got {str(source)[:80]!r}. "
+                    "Use load_local_image_trusted() for internal file paths."
+                )
 
             image_array = (
                 np.array(image.getdata())
