@@ -29,9 +29,20 @@ class LocalAudioStore:
     """
 
     def __init__(self, storage_path: str) -> None:
-        self._root = Path(storage_path)
+        self._root = Path(storage_path).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         logger.debug(f"LocalAudioStore initialised at: {self._root}")
+
+    def _safe_path(self, filename: str) -> Path:
+        """Resolve *filename* relative to the storage root and verify containment."""
+        target = (self._root / filename).resolve()
+        try:
+            target.relative_to(self._root)
+        except ValueError:
+            raise ValueError(
+                f"Path traversal rejected: '{filename}' escapes storage root"
+            )
+        return target
 
     # ------------------------------------------------------------------
     # Core CRUD methods
@@ -53,7 +64,7 @@ class LocalAudioStore:
         str
             Absolute path to the saved file.
         """
-        target = self._root / filename
+        target = self._safe_path(filename)
         try:
             target.write_bytes(data)
             logger.debug(f"LocalAudioStore.save_file: wrote {len(data)} bytes to {target}")
@@ -82,7 +93,7 @@ class LocalAudioStore:
         FileNotFoundError
             If the file does not exist in the storage root.
         """
-        target = self._root / filename
+        target = self._safe_path(filename)
         if not target.is_file():
             raise FileNotFoundError(f"LocalAudioStore: file not found: {target}")
         try:
@@ -108,7 +119,7 @@ class LocalAudioStore:
         FileNotFoundError
             If the file does not exist.
         """
-        target = self._root / filename
+        target = self._safe_path(filename)
         if not target.is_file():
             raise FileNotFoundError(f"LocalAudioStore: file not found: {target}")
         try:

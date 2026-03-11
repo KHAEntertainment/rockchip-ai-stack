@@ -33,8 +33,23 @@ class LocalFileStore:
     """
 
     def __init__(self, storage_path: str) -> None:
-        self._root = Path(storage_path)
+        self._root = Path(storage_path).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
+
+    def _safe_object_path(self, bucket: str, name: str) -> Path:
+        """Sanitise *name* and verify the resulting path is inside the bucket dir."""
+        safe_name = Path(name).name  # strip any parent components
+        if not safe_name:
+            raise ValueError(f"Invalid object name: {name!r}")
+        dest = (self._root / bucket / safe_name).resolve()
+        bucket_root = (self._root / bucket).resolve()
+        try:
+            dest.relative_to(bucket_root)
+        except ValueError:
+            raise ValueError(
+                f"Path traversal rejected: '{name}' escapes bucket '{bucket}'"
+            )
+        return dest
 
     # ------------------------------------------------------------------
     # Core object-store API
@@ -42,7 +57,7 @@ class LocalFileStore:
 
     def put_object(self, bucket: str, name: str, data: bytes) -> None:
         """Write *data* to ``<root>/<bucket>/<name>``, creating dirs as needed."""
-        dest = self._root / bucket / name
+        dest = self._safe_object_path(bucket, name)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
         logger.info(f"LocalFileStore: stored {dest}")
@@ -53,7 +68,7 @@ class LocalFileStore:
         Raises:
             FileNotFoundError: if the object does not exist.
         """
-        path = self._root / bucket / name
+        path = self._safe_object_path(bucket, name)
         if not path.exists():
             raise FileNotFoundError(f"Object not found: {bucket}/{name}")
         return path.read_bytes()
@@ -64,7 +79,7 @@ class LocalFileStore:
         Raises:
             FileNotFoundError: if the object does not exist.
         """
-        path = self._root / bucket / name
+        path = self._safe_object_path(bucket, name)
         if not path.exists():
             raise FileNotFoundError(f"Object not found: {bucket}/{name}")
         path.unlink()
@@ -105,7 +120,7 @@ class LocalFileStore:
                 status_code=HTTPStatus.NOT_FOUND,
                 detail="No files present in the bucket!",
             )
-        path = self._root / bucket / file_name
+        path = self._safe_object_path(bucket, file_name)
         if not path.exists():
             raise FileNotFoundError(f"The object {file_name} does not exist.")
         return path.stat().st_size
@@ -167,7 +182,7 @@ class LocalFileStore:
                 (self._root / bucket / name).unlink(missing_ok=True)
             logger.info(f"LocalFileStore: deleted all files in bucket {bucket}")
         elif file_name:
-            path = self._root / bucket / file_name
+            path = self._safe_object_path(bucket, file_name)
             if not path.exists():
                 raise FileNotFoundError(f"The object {file_name} does not exist.")
             path.unlink()
@@ -194,7 +209,7 @@ class LocalFileStore:
                 status_code=HTTPStatus.NOT_FOUND,
                 detail=f"Bucket {bucket} does not exist.",
             )
-        path = self._root / bucket / file_name
+        path = self._safe_object_path(bucket, file_name)
         if not path.exists():
             raise FileNotFoundError(f"The object {file_name} does not exist.")
         return io.BytesIO(path.read_bytes())
@@ -208,11 +223,12 @@ class LocalFileStore:
         suffix = str(shortuuid.uuid())
         prefix = "doc"
 
-        file_name = file_name.replace(" ", "-")
+        # Strip any directory components from the caller-supplied name before
+        # building the destination filename to prevent path traversal.
+        file_name = pathlib.Path(file_name).name.replace(" ", "-")
         file_path = pathlib.Path(file_name)
         f_primary_name, f_ext = file_path.stem, file_path.suffix
-        parent_path = file_name.replace(f"{f_primary_name}{f_ext}", "")
-        return f"{parent_path}{prefix}_{f_primary_name}_{suffix}{f_ext}"
+        return f"{prefix}_{f_primary_name}_{suffix}{f_ext}"
 
 
 # ---------------------------------------------------------------------------

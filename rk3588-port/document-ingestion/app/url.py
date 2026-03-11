@@ -99,29 +99,33 @@ def is_public_ip(ip: str) -> bool:
         return False
 
 
-def validate_url(url: str) -> bool:
+def validate_url(url: str) -> tuple[bool, set[str]]:
     """Validate URL against scheme, IDNA hostname, DNS resolution, and allowlist.
 
-    Prevents SSRF, DNS-rebinding, and encoding tricks.  Logic is identical to
-    the original pgvector implementation.
+    Prevents SSRF, DNS-rebinding, and encoding tricks.
+
+    Returns:
+        (True, resolved_ips) on success; (False, set()) on any failure.
+        The caller must pass *resolved_ips* to safe_fetch_url so that the
+        actual TCP peer can be verified against the pre-validated set.
     """
     try:
         url_cleaned = url.strip().replace("\r", "").replace("\n", "")
         parsed_url = urlparse(url_cleaned)
 
         if parsed_url.scheme != "https":
-            return False
+            return False, set()
 
         hostname = parsed_url.hostname
         if not hostname:
-            return False
+            return False, set()
 
         normalized_hostname = hostname.lower().rstrip(".").strip()
         try:
             normalized_hostname = idna.encode(normalized_hostname).decode("utf-8")
         except idna.IDNAError:
             logger.error(f"Invalid IDNA encoding for hostname: {hostname}")
-            return False
+            return False, set()
 
         allowed_domains = (
             [d.lower().rstrip(".") for d in config.ALLOWED_DOMAINS]
@@ -130,43 +134,73 @@ def validate_url(url: str) -> bool:
         )
         if not allowed_domains:
             logger.error("No ALLOWED_DOMAINS configured; refusing all URLs to prevent SSRF.")
-            return False
+            return False, set()
 
         if not any(fnmatch(normalized_hostname, pattern) for pattern in allowed_domains):
             logger.info(
                 f"URL hostname {normalized_hostname} is not in the "
                 f"whitelisted domains {allowed_domains}."
             )
-            return False
+            return False, set()
 
         try:
             infos = socket.getaddrinfo(normalized_hostname, None)
             resolved_ips = {info[4][0] for info in infos}
         except (socket.gaierror, socket.error) as e:
             logger.error(f"DNS resolution failed for {normalized_hostname}: {e}")
-            return False
+            return False, set()
 
         for ip in resolved_ips:
             if not is_public_ip(ip):
                 logger.warning(f"Non-public IP blocked: {ip} for host {normalized_hostname}")
-                return False
+                return False, set()
 
-        return True
+        return True, resolved_ips
 
     except Exception as e:
         logger.error(f"URL validation failed: {e}")
-        return False
+        return False, set()
 
 
-def safe_fetch_url(validated_url: str, headers: dict) -> requests.Response:
-    """Fetch *validated_url* without following redirects (SSRF mitigation)."""
-    return requests.get(
+def safe_fetch_url(
+    validated_url: str,
+    headers: dict,
+    resolved_ips: set[str],
+) -> requests.Response:
+    """Fetch *validated_url* and verify the TCP peer IP against *resolved_ips*.
+
+    Closes the DNS-rebinding window that exists when validate_url and the
+    actual HTTP request use separate DNS lookups.  The connection is kept open
+    (stream=True) until the peer IP is confirmed, then the body is consumed.
+    """
+    session = requests.Session()
+    response = session.get(
         validated_url,
         headers=headers,
         timeout=5,
         allow_redirects=False,
         verify=True,
+        stream=True,
     )
+
+    # Verify the connected peer IP while the socket is still open.
+    try:
+        raw_conn = getattr(response.raw, "_connection", None)
+        sock = getattr(raw_conn, "sock", None)
+        if sock is not None:
+            peer_ip = sock.getpeername()[0]
+            if peer_ip not in resolved_ips:
+                response.close()
+                raise ValueError(
+                    f"DNS rebinding detected: connected to {peer_ip!r}, "
+                    f"expected one of {resolved_ips!r}"
+                )
+    except (AttributeError, OSError) as exc:
+        logger.warning(f"Could not verify peer IP for {validated_url}: {exc}")
+
+    # Consume the body now so callers can use response.text / response.content.
+    _ = response.content
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -219,12 +253,13 @@ def ingest_url_to_lancedb(url_list: List[str]) -> dict:
 
     for url in url_list:
         try:
-            if not validate_url(url):
+            valid, resolved_ips = validate_url(url)
+            if not valid:
                 logger.info(f"Invalid URL skipped: {url}")
                 invalid_urls += 1
                 continue
 
-            response = safe_fetch_url(url, headers)
+            response = safe_fetch_url(url, headers, resolved_ips)
 
             if response.status_code != HTTPStatus.OK:
                 logger.info(f"Fetch failed {url}: {response.status_code}")
