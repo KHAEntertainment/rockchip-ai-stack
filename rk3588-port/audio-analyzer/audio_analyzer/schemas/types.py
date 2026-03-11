@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
 from enum import Enum
 
 class DeviceType(str, Enum):
@@ -66,6 +69,7 @@ class WhisperModel(str, Enum):
 
 class TranscriptionStatus(str, Enum):
     """Enum for the status of a transcription job"""
+    #TODO Use this type in asynchronous API design, if required. Currently, only COMPLETED status is used.
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -76,3 +80,8 @@ class TranscriptionBackend(str, Enum):
     """Available transcription backends"""
     WHISPER_CPP = "whisper_cpp"
     RKNN_NPU = "rknn_npu"    # TODO: RKNN — see transcriber.py
+
+
+class StorageBackend(str, Enum):
+    """Available storage backends for handling files and outputs"""
+    FILESYSTEM = "local"

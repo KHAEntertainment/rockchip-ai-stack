@@ -11,25 +11,39 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import (
     RunnableParallel,
-    RunnablePassthrough,
     RunnableLambda,
 )
 from langchain_openai import ChatOpenAI as EGAIModelServing
 from langchain_openai import OpenAIEmbeddings as EGAIEmbeddings
+from pydantic_settings import BaseSettings
 from shared.lancedb_schema import get_or_create_table
 from .custom_reranker import CustomReranker
 
 logging.basicConfig(level=logging.INFO)
 
+
 # ---------------------------------------------------------------------------
-# Settings from environment
+# Settings
 # ---------------------------------------------------------------------------
 
-LANCEDB_PATH = os.getenv("LANCEDB_PATH", "./data/lancedb")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "documents")
-EMBEDDING_ENDPOINT_URL = os.getenv("EMBEDDING_ENDPOINT_URL", "http://localhost:8001/v1")
-MODEL_NAME = os.getenv("EMBEDDING_MODEL", "Qwen2.5-VL")
-FETCH_K = int(os.getenv("FETCH_K", "10"))
+class Settings(BaseSettings):
+    LANCEDB_PATH: str = "./data/lancedb"
+    COLLECTION_NAME: str = "documents"
+    LLM_ENDPOINT_URL: str = "http://localhost:8080/v1"
+    LLM_BACKEND: str = "llama"
+    EMBEDDING_ENDPOINT_URL: str = "http://localhost:8001/v1"
+    RERANKER_ENDPOINT_URL: str = "http://localhost:8003"
+    FETCH_K: int = 10
+    LLM_MODEL_NAME: str = "Qwen2.5-VL"
+    EMBEDDING_MODEL: str = "Qwen2.5-VL"
+    SEED: int = 42
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+
+
+settings = Settings()
 
 # ---------------------------------------------------------------------------
 # Embeddings
@@ -38,8 +52,8 @@ FETCH_K = int(os.getenv("FETCH_K", "10"))
 try:
     embedder = EGAIEmbeddings(
         openai_api_key="EMPTY",
-        openai_api_base="{}".format(EMBEDDING_ENDPOINT_URL),
-        model=MODEL_NAME,
+        openai_api_base=settings.EMBEDDING_ENDPOINT_URL,
+        model=settings.EMBEDDING_MODEL,
     )
     logging.info(
         "Embeddings initialized with endpoint configured in EMBEDDING_ENDPOINT_URL"
@@ -52,16 +66,16 @@ except Exception as e:
 # LanceDB vector store and retriever
 # ---------------------------------------------------------------------------
 
-db = lancedb.connect(LANCEDB_PATH)
-table = get_or_create_table(db, COLLECTION_NAME)
+db = lancedb.connect(settings.LANCEDB_PATH)
+table = get_or_create_table(db, settings.COLLECTION_NAME)
 knowledge_base = LangChainLanceDB(
     connection=db,
     embedding=embedder,
-    table_name=COLLECTION_NAME,
+    table_name=settings.COLLECTION_NAME,
 )
 retriever = knowledge_base.as_retriever(
     search_type="mmr",
-    search_kwargs={"k": FETCH_K},
+    search_kwargs={"k": settings.FETCH_K},
 )
 
 # ---------------------------------------------------------------------------
@@ -95,26 +109,26 @@ prompt = ChatPromptTemplate.from_template(template)
 # LLM backend detection
 # ---------------------------------------------------------------------------
 
-ENDPOINT_URL = os.getenv("LLM_ENDPOINT_URL", "http://localhost:8080/v1")
-LLM_BACKEND_ENV = os.getenv("LLM_BACKEND", "").lower()
-
-# Determine backend from explicit env var first, then fall back to URL heuristic.
-if LLM_BACKEND_ENV:
-    LLM_BACKEND = LLM_BACKEND_ENV
-elif "ovms" in ENDPOINT_URL.lower():
+# Determine backend: explicit LLM_BACKEND env var takes priority over URL heuristic.
+_backend_env = settings.LLM_BACKEND.lower()
+if _backend_env:
+    LLM_BACKEND = _backend_env
+elif "ovms" in settings.LLM_ENDPOINT_URL.lower():
     LLM_BACKEND = "ovms"
-elif "text-generation" in ENDPOINT_URL.lower():
+elif "text-generation" in settings.LLM_ENDPOINT_URL.lower():
     LLM_BACKEND = "tgi"
-elif "vllm" in ENDPOINT_URL.lower():
+elif "vllm" in settings.LLM_ENDPOINT_URL.lower():
     LLM_BACKEND = "vllm"
 else:
     LLM_BACKEND = "unknown"
 
 logging.info(f"Using LLM inference backend: {LLM_BACKEND}")
 
-LLM_MODEL = os.getenv("LLM_MODEL_NAME", "Qwen2.5-VL")
-RERANKER_ENDPOINT = os.getenv("RERANKER_ENDPOINT_URL", "http://localhost:8003") + "/rerank"
+# RERANKER_ENDPOINT_URL is the base URL; append /rerank for the POST endpoint.
+RERANKER_ENDPOINT = settings.RERANKER_ENDPOINT_URL.rstrip("/") + "/rerank"
+
 callbacks = [StreamingStdOutCallbackHandler()]
+
 
 # ---------------------------------------------------------------------------
 # Retrieval helpers
@@ -137,7 +151,7 @@ async def context_retriever_fn(chain_inputs: dict):
         raise ValueError("Invalid input: chain_inputs must be a dictionary.")
 
     # in process_chunks we already raise ValueError for empty question, but to keep
-    # shape consistent we return empty list here
+    # shape consistent we return empty dict here
     question = chain_inputs.get("question", "")
     if not question:
         return {}  # to keep shape consistent
@@ -151,11 +165,12 @@ def format_docs(docs):
     Format a list of Document objects into a readable string for prompt context.
 
     Args:
-        docs (list): List of Document objects (each with .page_content and .metadata attributes).
+        docs (list): List of Document objects (each with .page_content and .metadata
+            attributes).
 
     Returns:
-        str: Formatted string with each document's sl.no, content and source, or a message if
-        no docs are found.
+        str: Formatted string with each document's sl.no, content and source, or a
+        message if no docs are found.
     """
     if not docs:
         return "No relevant context found."
@@ -165,10 +180,10 @@ def format_docs(docs):
         content = doc.page_content.strip()
         metadata = doc.metadata or {}
         source = metadata.get("source", "Unknown source")
-
         formatted_docs.append(f"[Document {i}] {content}\nSource: {source}")
 
     return "\n\n".join(formatted_docs)
+
 
 # ---------------------------------------------------------------------------
 # Main streaming entry-point
@@ -178,15 +193,15 @@ async def process_chunks(conversation_messages, max_tokens):
     """
     Process a list of conversation messages and stream the LLM-generated answer.
 
-    This function builds the retrieval-augmented generation (RAG) chain, including context
-    retrieval, reranking, prompt formatting, and LLM inference. It streams the output as
-    server-sent events.
+    This function builds the retrieval-augmented generation (RAG) chain, including
+    context retrieval, reranking, prompt formatting, and LLM inference. It streams the
+    output as server-sent events.
 
     Args:
-        conversation_messages (list): List of message objects, each with 'role' and 'content'.
-            The last message is treated as the user's question.
-        max_tokens (int): Maximum number of tokens for the LLM response (if supported by
-            backend).
+        conversation_messages (list): List of message objects, each with 'role' and
+            'content'. The last message is treated as the user's question.
+        max_tokens (int): Maximum number of tokens for the LLM response (if supported
+            by backend).
 
     Yields:
         str: Server-sent event strings ("data: ...\\n\\n") with the LLM's output chunks.
@@ -194,7 +209,7 @@ async def process_chunks(conversation_messages, max_tokens):
     Raises:
         ValueError: If the question text is empty or only whitespace.
     """
-    # All messages except the last one are considered history
+    # All messages except the last one are treated as history.
     if len(conversation_messages) > 1:
         valid_history_msgs = []
         for msg in conversation_messages[:-1]:
@@ -206,20 +221,21 @@ async def process_chunks(conversation_messages, max_tokens):
     else:
         history = ""
 
-    # Raise ValueError if question is empty or only whitespace
+    # Raise ValueError if question is empty or only whitespace.
     question_text = conversation_messages[-1].content
     if not question_text or not question_text.strip():
         raise ValueError("Question text cannot be empty")
 
     context_retriever = RunnableLambda(context_retriever_fn)
 
-    # "llama" and "vllm" both use the OpenAI-compatible endpoint without a seed parameter.
-    # "tgi", "ovms", and other backends pass seed + max_tokens.
+    # "llama" and "vllm" both target an OpenAI-compatible endpoint (llama.cpp / llama-server
+    # format) and must NOT receive a seed parameter.  "tgi", "ovms", and any other backend
+    # pass seed + max_tokens.
     if LLM_BACKEND in ["vllm", "llama", "unknown"]:
         model = EGAIModelServing(
             openai_api_key="EMPTY",
-            openai_api_base="{}".format(ENDPOINT_URL),
-            model_name=LLM_MODEL,
+            openai_api_base=settings.LLM_ENDPOINT_URL,
+            model_name=settings.LLM_MODEL_NAME,
             top_p=0.99,
             temperature=0.01,
             streaming=True,
@@ -227,23 +243,22 @@ async def process_chunks(conversation_messages, max_tokens):
             stop=["\n\n"],
         )
     else:
-        seed_value = int(os.getenv("SEED", 42))
         model = EGAIModelServing(
             openai_api_key="EMPTY",
-            openai_api_base="{}".format(ENDPOINT_URL),
-            model_name=LLM_MODEL,
+            openai_api_base=settings.LLM_ENDPOINT_URL,
+            model_name=settings.LLM_MODEL_NAME,
             top_p=0.99,
             temperature=0.01,
             streaming=True,
             callbacks=callbacks,
-            seed=seed_value,
+            seed=settings.SEED,
             max_tokens=max_tokens,
         )
 
     re_ranker = CustomReranker(reranking_endpoint=RERANKER_ENDPOINT)
     re_ranker_lambda = RunnableLambda(re_ranker.rerank)
 
-    # RAG Chain
+    # RAG chain: retrieve → rerank → format → prompt → LLM → parse
     chain = (
         RunnableParallel({
             "context": context_retriever,

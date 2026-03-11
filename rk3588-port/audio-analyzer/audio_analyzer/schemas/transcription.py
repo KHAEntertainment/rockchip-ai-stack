@@ -1,9 +1,13 @@
-from enum import Enum
-from typing import Annotated, Optional, List
+# Copyright (C) 2025 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
 
-from fastapi import UploadFile, File, Form, Query
+from enum import Enum
+from typing import Annotated, Optional, List, Literal, Tuple, get_type_hints, Type
+
+from fastapi import Body, UploadFile, File, Form, Query, Depends
+from fastapi.datastructures import FormData
+from pydantic import BaseModel, Field, field_validator, BeforeValidator
 from pydantic.json_schema import SkipJsonSchema
-from pydantic import BaseModel, Field
 
 from audio_analyzer.core.settings import settings
 from audio_analyzer.schemas.types import TranscriptionStatus, DeviceType
@@ -51,16 +55,14 @@ class TranscriptionFormData:
             bool,
             Form(description="_(Optional)_ A flag to include timestamps in the transcription output. **Default value : True**")
         ] = True,
-        file: Annotated[
-            UploadFile | SkipJsonSchema[None | str],
-            File(description="Select video file to be transcribed.")
-        ] = None,
+        file: Annotated[UploadFile | SkipJsonSchema[None | str], File(description="Select video file to be transcribed.")] = None,
     ):
         self.file = file
         self.device = device.strip().lower() if isinstance(device, str) else device
         self.model_name = model_name.strip().lower() if isinstance(model_name, str) else model_name
         self.include_timestamps = include_timestamps
-        # Keep these as empty strings for compatibility with existing endpoint code
+        # Keep minio_bucket/video_id/video_name as empty strings for compatibility with
+        # store_transcript_output signature; they are not used with LocalAudioStore.
         self.minio_bucket = ""
         self.video_id = ""
         self.video_name = ""
@@ -82,7 +84,7 @@ class TranscriptionResponse(BaseModel):
                     "status": "completed",
                     "message": "Transcription completed successfully",
                     "job_id": "1234-5678-90ab-cdef",
-                    "transcript_path": "/tmp/audio_analyzer/transcript/meeting_recording.txt",
+                    "transcript_path": "/transcripts/meeting_recording.txt",
                     "video_name": "meeting_recording.mp4",
                     "video_duration": 120.5
                 }

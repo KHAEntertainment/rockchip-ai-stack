@@ -1,3 +1,6 @@
+# Copyright (C) 2025 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
 from pathlib import Path
 from typing import List, Optional, Any, Type
 from enum import Enum
@@ -10,19 +13,18 @@ from audio_analyzer.schemas.types import DeviceType, WhisperModel
 
 class Settings(BaseSettings):
     """
-    Configuration settings for the RK3588 port of the Audio Analyzer service.
+    Configuration settings used across the whole application.
 
-    All values can be overridden via environment variables or a .env file.
-    OpenVINO-specific settings have been removed; MinIO has been replaced by
-    a local filesystem store.
+    These settings can be configured via environment variables on the host or inside a container.
+    All OpenVINO-specific and MinIO-specific settings have been removed for the RK3588 port.
     """
 
     # API configuration
-    API_V1_PREFIX: str = "/api/v1"
+    API_V1_PREFIX: str = "/api/v1"  # API version prefix to be used with each endpoint route
     APP_NAME: str = "Audio Analyzer Service"
     API_VER: str = "1.0.0"
     API_DESCRIPTION: str = "API for intelligent audio processing including speech transcription and audio event detection"
-    FASTAPI_ENV: str = "development"
+    FASTAPI_ENV: str = "development"  # Environment for FastAPI (development or production)
 
     # API Health check configuration
     API_STATUS: str = "healthy"
@@ -31,37 +33,32 @@ class Settings(BaseSettings):
     # CORS configuration
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
-    # Temporary working directories
-    OUTPUT_DIR: Path = Path("/tmp/audio_analyzer")
-    UPLOAD_DIR: Path = Path("/tmp/audio_analyzer/uploads")
-    AUDIO_DIR: Path = Path("/tmp/audio_analyzer/audio")
+    # File storage configuration
+    OUTPUT_DIR: Path = "/tmp/audio_analyzer"        # Temporary root directory for saving transcription outputs
+    UPLOAD_DIR: Path = "/tmp/audio_analyzer/uploads" # Temporary directory for uploaded video files
+    AUDIO_DIR: Path = "/tmp/audio_analyzer/audio"    # Temporary directory for saving audio stream extracted from video files
 
-    # Model storage — GGML only (no OpenVINO)
-    MODEL_DIR: Path = Path("./models/whisper")           # Primary model directory (env: MODEL_DIR)
-    GGML_MODEL_DIR: Path = Path("./models/whisper")      # GGML .bin files for whisper.cpp
+    # Local storage path for uploaded audio/video files (replaces MinIO)
+    STORAGE_PATH: Path = Path("./data/audio")        # Directory for uploaded audio/video files
 
-    # Local audio/video file store (replaces MinIO)
-    STORAGE_PATH: Path = Path("./data/audio")            # env: STORAGE_PATH
+    # Whisper model download configuration
+    ENABLED_WHISPER_MODELS: Optional[List[WhisperModel]] = None  # List of whisper model variants to be downloaded
+    MODEL_DIR: Path = Path("./models/whisper")       # Directory for GGML Whisper model files
 
-    # Whisper model selection
-    ENABLED_WHISPER_MODELS: Optional[List[WhisperModel]] = None
+    # Whisper configuration
     DEFAULT_WHISPER_MODEL: Optional[WhisperModel] = None
-    TRANSCRIPT_LANGUAGE: Optional[str] = None
+    TRANSCRIPT_LANGUAGE: Optional[str] = None  # If None, auto-detection based on model capabilities will be used
 
-    # Device / backend
-    DEFAULT_DEVICE: DeviceType = DeviceType.CPU
-    DEFAULT_BACKEND: str = "whisper_cpp"                 # env: DEFAULT_BACKEND
-    WHISPER_THREADS: int = 4                             # env: WHISPER_THREADS
-    WHISPER_MODEL: str = "base"                          # env: WHISPER_MODEL
+    # Device configuration
+    DEFAULT_DEVICE: DeviceType = DeviceType.CPU  # Default compute device to use for transcription
 
-    # Audio format — 16 kHz, 16-bit, mono (required by whisper.cpp)
+    # Audio configuration — 16 kHz, 16-bit, mono (required by Whisper)
     AUDIO_SAMPLE_RATE: int = 16000
     AUDIO_BIT_DEPTH: int = 16
     AUDIO_CHANNELS: int = 1
 
-    # Upload size limit
-    MAX_FILE_SIZE: int = 100 * 1024 * 1024              # 100 MB default (env: MAX_FILE_SIZE_MB scales this)
-    MAX_FILE_SIZE_MB: int = 100                          # env: MAX_FILE_SIZE_MB
+    # Uploaded video file size limits (in bytes)
+    MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100 MB by default
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -72,35 +69,48 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DEBUG(self) -> bool:
-        """Determine if the application is running in debug mode."""
+        """Determine if the application is running in debug mode based on environment"""
         return self.FASTAPI_ENV.lower() == "development"
 
     @computed_field
     @property
     def AUDIO_FORMAT_PARAMS(self) -> dict:
-        """Get audio format parameters for moviepy write_audiofile."""
+        """Get audio format parameters based on configured settings"""
         return {
             "fps": self.AUDIO_SAMPLE_RATE,
             "nbytes": self.AUDIO_BIT_DEPTH // 8,
             "nchannels": self.AUDIO_CHANNELS,
         }
 
+    # Provide backward-compatible aliases so that code that references
+    # GGML_MODEL_DIR still works after the rename to MODEL_DIR.
+    @computed_field
+    @property
+    def GGML_MODEL_DIR(self) -> Path:
+        """Alias for MODEL_DIR — path to GGML model files."""
+        return self.MODEL_DIR
+
+    # Convert the EnabledWhisperModels to Enum type for better validation
     @computed_field
     @property
     def EnabledWhisperModelsEnum(self) -> Type[Enum]:
-        """Creates a dynamic Enum class with enabled whisper models for request validation."""
+        """
+        Creates a dynamic Enum class with enabled whisper models.
+        This allows for proper type validation in request schemas.
+        """
         models = self.ENABLED_WHISPER_MODELS
         return Enum('EnabledWhisperModels', {model.name: model.value for model in models})
 
     @field_validator("ENABLED_WHISPER_MODELS", mode="before")
     @classmethod
     def create_enabled_model_list(cls, v: Any) -> List[WhisperModel]:
-        """Convert comma-separated string value from env vars to a list of WhisperModel."""
+        """Convert comma-separated string value from env vars to a list of WhisperModel"""
         try:
             if isinstance(v, str) and (v := v.strip()):
                 return [WhisperModel(item.strip().lower()) for item in v.split(",") if item.strip()]
             raise ValueError
         except ValueError:
+            # Handle invalid model type
             valid_models = ", ".join([m.value for m in WhisperModel])
             raise ValueError(
                 f"Invalid model type: '{v}'. "
@@ -110,7 +120,9 @@ class Settings(BaseSettings):
     @field_validator("DEFAULT_WHISPER_MODEL", mode="before")
     @classmethod
     def validate_default_whisper_model(cls, v: Any, info) -> WhisperModel | None:
-        """Validate the default whisper model against the list of enabled models."""
+        """Validate the default whisper model against the list of enabled models.
+        If no default model is provided, return the small.en model if available or first enabled model.
+        """
         try:
             enabled_models = info.data.get('ENABLED_WHISPER_MODELS', [])
 
@@ -124,16 +136,11 @@ class Settings(BaseSettings):
                 return WhisperModel(v)
 
             fallback_model = enabled_models[0] if len(enabled_models) > 0 else None
+            # If no default model is provided, return small.en if available or first enabled model
             return WhisperModel.SMALL_EN if (WhisperModel.SMALL_EN in enabled_models) else fallback_model
 
         except ValueError as e:
             raise e
-
-    @field_validator("MAX_FILE_SIZE_MB", mode="before")
-    @classmethod
-    def sync_max_file_size(cls, v: Any) -> int:
-        """Accept MAX_FILE_SIZE_MB from env and return as integer."""
-        return int(v)
 
 
 settings = Settings()

@@ -59,12 +59,15 @@ class CustomReranker:
             reranked_context = [
                 retrieved_docs["context"][item["index"]] for item in sorted_results[:top_k]
             ]
-            logging.info(f"Reranked context for question '{retrieved_docs['question']}': {reranked_context}")
+            logging.info(
+                f"Reranked context for question '{retrieved_docs['question']}': "
+                f"{reranked_context}"
+            )
 
             return {
                 "question": retrieved_docs["question"],
                 "context": reranked_context,
-                "history": retrieved_docs.get("history", "")
+                "history": retrieved_docs.get("history", ""),
             }
         else:
             raise Exception(f"Error: {response.status_code}, {response.text}")

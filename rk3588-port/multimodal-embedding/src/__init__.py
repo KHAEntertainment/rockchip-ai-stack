@@ -18,5 +18,5 @@ Key changes from upstream:
 from .wrapper import EmbeddingModel
 
 __all__ = [
-    "EmbeddingModel"
+    "EmbeddingModel",
 ]
