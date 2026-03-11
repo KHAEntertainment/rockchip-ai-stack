@@ -233,12 +233,13 @@ async def delete_documents(
     response_class=StreamingResponse,
 )
 async def download_documents(
+    file_name: Annotated[
+        str, BeforeValidator(Validation.sanitize_input)
+    ],
     bucket_name: Annotated[
         str, BeforeValidator(Validation.sanitize_input), Query(min_length=3)
     ] = config.DEFAULT_BUCKET,
-    file_name: Annotated[
-        str, BeforeValidator(Validation.sanitize_input)
-    ] = None,
+):
 ):
     """Return a stored document as a streaming download."""
     try:
