@@ -1,0 +1,6 @@
+-r ../shared/requirements-base.txt
+pywhispercpp @ git+https://github.com/absadiki/pywhispercpp@v1.4.0
+huggingface-hub>=0.23.0
+moviepy>=1.0.3
+python-multipart>=0.0.9
+aiofiles>=23.2.1

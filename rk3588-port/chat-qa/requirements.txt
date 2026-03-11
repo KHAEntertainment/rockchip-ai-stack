@@ -1,0 +1,4 @@
+-r ../shared/requirements-base.txt
+langchain>=0.2.0
+langchain-openai>=0.1.0
+sse-starlette>=2.1.0
