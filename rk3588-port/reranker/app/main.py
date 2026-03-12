@@ -68,7 +68,11 @@ reranker: Union[CPUReranker, NPUReranker, None] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load the reranker model before serving requests, unload on shutdown."""
+    """
+    Prepare and tear down the global reranker instance for the application's lifespan.
+    
+    On startup, instantiates and attempts to load the configured reranker backend and assigns it to the module-level `reranker`. If loading raises `NotImplementedError` (NPU stub), leaves `reranker` as `None` to indicate a degraded state; other exceptions during loading are propagated. On shutdown, clears the module-level `reranker`.
+    """
     global reranker
 
     backend_label = "rkllm_npu" if settings.use_npu else "cpu"
@@ -150,7 +154,15 @@ class RerankResult(BaseModel):
 
 @app.get("/health")
 async def health():
-    """Return service liveness status, active model name, and backend label."""
+    """
+    Report service liveness along with the active model name and backend label.
+    
+    Returns:
+        dict: Mapping with keys 'status' ("ok"), 'model' (model name), and 'backend' ("rkllm_npu" or "cpu").
+    
+    Raises:
+        HTTPException: with status code 503 if the reranker is not loaded.
+    """
     backend = "rkllm_npu" if settings.use_npu else "cpu"
     if reranker is None:
         raise HTTPException(
@@ -162,22 +174,30 @@ async def health():
 
 @app.get("/models")
 async def models():
-    """Return the list of model/backend combinations available in this service."""
+    """
+    List available model/backend combinations provided by the service.
+    
+    Returns:
+        list[dict]: A list containing a single dictionary with keys `"id"` (the model name) and `"backend"` (either `"rkllm_npu"` or `"cpu"`).
+    """
     backend = "rkllm_npu" if settings.use_npu else "cpu"
     return [{"id": settings.model_name, "backend": backend}]
 
 
 @app.post("/rerank", response_model=List[RerankResult])
 async def rerank(request: RerankRequest):
-    """Score each (query, text) pair and return results sorted by score desc.
-
-    The ``index`` field in each result corresponds to the 0-based position of
-    the text in the input ``texts`` list, allowing the caller to map scores
-    back to the original candidates.
-
-    The ``raw_scores`` field is accepted for API compatibility but does not
-    alter the output — scores are always sigmoid-normalised ``[0, 1]`` floats
-    from the CPU backend.
+    """
+    Score each provided text against the query and return candidates sorted by descending relevance.
+    
+    The `index` field in each result is the 0-based position of the text in the input `request.texts`. The API accepts `raw_scores` for compatibility but does not change output; returned `score` values are floats in the range [0, 1].
+    
+    Returns:
+        results (List[dict]): A list of objects with keys `index` (int) and `score` (float), sorted by `score` from highest to lowest.
+    
+    Raises:
+        HTTPException: with status 503 if the reranker model is not loaded.
+        HTTPException: with status 501 if the backend reports the operation is unimplemented.
+        HTTPException: with status 500 for other internal reranker errors.
     """
     if reranker is None:
         raise HTTPException(

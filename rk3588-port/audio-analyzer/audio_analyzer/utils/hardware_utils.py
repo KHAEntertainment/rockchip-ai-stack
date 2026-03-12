@@ -7,7 +7,12 @@ logger = logging.getLogger(__name__)
 
 
 def get_available_backends() -> list[str]:
-    """Return list of available transcription backends on this hardware."""
+    """
+    Determine available transcription backend identifiers for the current RK3588 hardware.
+    
+    Returns:
+        available_backends (list[str]): List of backend identifiers; currently contains "whisper_cpp".
+    """
     backends = ["whisper_cpp"]   # Always available (CPU)
     if is_npu_available():
         # TODO: RKNN — NPU detected; RKNN Whisper backend not yet implemented
@@ -16,5 +21,10 @@ def get_available_backends() -> list[str]:
 
 
 def get_default_backend() -> str:
-    """Return the recommended default backend for this hardware."""
+    """
+    Get the recommended default transcription backend for this hardware.
+    
+    Returns:
+        str: The name of the default backend, "whisper_cpp".
+    """
     return "whisper_cpp"

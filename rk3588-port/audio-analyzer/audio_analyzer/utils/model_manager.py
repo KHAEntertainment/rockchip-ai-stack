@@ -26,7 +26,11 @@ class ModelManager:
 
     @staticmethod
     async def download_models() -> None:
-        """Download all required GGML models based on configuration."""
+        """
+        Orchestrates downloading of all enabled GGML Whisper models.
+        
+        Initiates downloads for each model listed in settings.ENABLED_WHISPER_MODELS from the configured whisper.cpp repository and ensures the configured model directory contains the required GGML files.
+        """
         logger.debug("Starting model download process")
 
         ggml_repo_id = "ggerganov/whisper.cpp"
@@ -38,11 +42,10 @@ class ModelManager:
     @staticmethod
     async def _download_ggml_models(repo_id: str) -> None:
         """
-        Download ggml models for whisper.cpp from Hugging Face.
-
-        Args:
-            repo_id: Hugging Face repository ID for whisper.cpp GGML models
-                     (``ggerganov/whisper.cpp``)
+        Download enabled GGML whisper.cpp models from the specified Hugging Face repository into the configured model directory.
+        
+        Parameters:
+            repo_id (str): Hugging Face repository ID containing GGML model files (for example, "ggerganov/whisper.cpp").
         """
         logger.debug("Downloading ggml models for whisper.cpp")
 
@@ -90,14 +93,14 @@ class ModelManager:
     @staticmethod
     def is_model_downloaded(model: WhisperModel, use_gpu: bool = False) -> bool:
         """
-        Check if a GGML model file is present and non-empty.
-
-        Args:
-            model: WhisperModel enum value
-            use_gpu: Ignored in this port (kept for API compatibility).
-
+        Determine whether the specified GGML Whisper model file exists on disk and is non-empty.
+        
+        Parameters:
+            model (WhisperModel | str): The model enum or model name to check.
+            use_gpu (bool): Ignored for this implementation; present for API compatibility.
+        
         Returns:
-            True if the model file exists and has content, False otherwise
+            True if the corresponding model file exists and its size is greater than zero, False otherwise.
         """
         model_name = model.value if isinstance(model, WhisperModel) else model
         model_path = ModelManager.get_model_path(model_name, use_gpu=False)

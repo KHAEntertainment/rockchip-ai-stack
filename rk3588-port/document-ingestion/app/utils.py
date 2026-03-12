@@ -15,11 +15,11 @@ config = Settings()
 
 
 def check_tables_exist() -> bool:
-    """Return True if the LanceDB table named ``config.COLLECTION_NAME`` exists.
-
-    Replaces the original Postgres ``check_tables_exist()`` which queried
-    ``information_schema.tables`` for ``langchain_pg_embedding`` and
-    ``langchain_pg_collection``.
+    """
+    Check whether the configured LanceDB collection exists.
+    
+    Returns:
+        bool: `True` if the configured collection (config.COLLECTION_NAME) is present in the LanceDB at config.LANCEDB_PATH, `False` otherwise (also returns `False` if the LanceDB path is missing or inaccessible).
     """
     try:
         db = lancedb.connect(config.LANCEDB_PATH)
@@ -30,9 +30,10 @@ def check_tables_exist() -> bool:
 
 def get_separators() -> list:
     """
-    Returns the list of text separators used by RecursiveCharacterTextSplitter.
-
-    Includes common whitespace, punctuation, and CJK full-width characters.
+    Provide an ordered list of text separators used for splitting text with RecursiveCharacterTextSplitter.
+    
+    Returns:
+        list[str]: Separators ordered from broader to finer boundaries, including double-newline, newline, space, common punctuation, zero-width space, fullwidth/ideographic punctuation, and the empty string.
     """
     return [
         "\n\n",
@@ -71,7 +72,15 @@ def parse_html_content(html_content: str, source_url: str = "") -> str:
 class Validation:
     @staticmethod
     def sanitize_input(input: str) -> str | None:
-        """Strip whitespace.  Return None if the result is empty."""
+        """
+        Trim leading and trailing whitespace from the input and return None when the resulting string is empty.
+        
+        Parameters:
+            input (str): The string to sanitize.
+        
+        Returns:
+            str | None: The trimmed string, or `None` if it is empty after trimming.
+        """
         input = str.strip(input)
         if len(input) == 0:
             return None
@@ -79,5 +88,13 @@ class Validation:
 
     @staticmethod
     def strip_input(input: str) -> str:
-        """Return whitespace-stripped string."""
+        """
+        Strip leading and trailing whitespace from the given string.
+        
+        Parameters:
+            input (str): The string to strip.
+        
+        Returns:
+            str: The input string with leading and trailing whitespace removed.
+        """
         return str.strip(input)

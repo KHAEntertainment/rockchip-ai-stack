@@ -134,16 +134,18 @@ RERANKER_ENDPOINT = settings.RERANKER_ENDPOINT_URL.rstrip("/") + "/rerank"
 
 async def context_retriever_fn(chain_inputs: dict):
     """
-    Retrieve relevant documents for a given question and conversation history.
-
-    Args:
-        chain_inputs (dict): Dictionary with "question" and "history" keys.
-
+    Retrieve relevant documents for the provided chain input.
+    
+    Takes a dictionary containing a "question" (and optional "history") and returns the documents relevant to that question. If the input is not a dict, raises ValueError. If "question" is empty or missing, returns an empty dict to preserve the expected response shape.
+    
+    Parameters:
+        chain_inputs (dict): Input mapping expected to include a "question" string and optional "history".
+    
     Returns:
-        list: List of relevant Document objects (may be empty if no question or no results).
-
+        list[Document] | dict: A list of relevant Document objects when a non-empty question is provided; an empty dict otherwise.
+    
     Raises:
-        ValueError: If chain_inputs is not a dict.
+        ValueError: If chain_inputs is not a dictionary.
     """
     if not isinstance(chain_inputs, dict):
         raise ValueError("Invalid input: chain_inputs must be a dictionary.")
@@ -160,15 +162,14 @@ async def context_retriever_fn(chain_inputs: dict):
 
 def format_docs(docs):
     """
-    Format a list of Document objects into a readable string for prompt context.
-
-    Args:
-        docs (list): List of Document objects (each with .page_content and .metadata
-            attributes).
-
+    Format a sequence of retrieved Document objects into a single prompt-ready string.
+    
+    Parameters:
+        docs (list): Retrieved Document objects with `page_content` and optional `metadata.source`.
+    
     Returns:
-        str: Formatted string with each document's sl.no, content and source, or a
-        message if no docs are found.
+        str: A numbered, human-readable aggregation of each document's trimmed content and source,
+             or "No relevant context found." when `docs` is empty.
     """
     if not docs:
         return "No relevant context found."
@@ -189,23 +190,19 @@ def format_docs(docs):
 
 async def process_chunks(conversation_messages, max_tokens):
     """
-    Process a list of conversation messages and stream the LLM-generated answer.
-
-    This function builds the retrieval-augmented generation (RAG) chain, including
-    context retrieval, reranking, prompt formatting, and LLM inference. It streams the
-    output as server-sent events.
-
-    Args:
-        conversation_messages (list): List of message objects, each with 'role' and
-            'content'. The last message is treated as the user's question.
-        max_tokens (int): Maximum number of tokens for the LLM response (if supported
-            by backend).
-
+    Stream a retrieval-augmented LLM answer for a conversation as server-sent events.
+    
+    Builds a RAG pipeline from prior messages (context retrieval, reranking, context formatting, prompt construction, and model inference) and yields the model's output split into SSE-compatible "data: ...\n\n" chunks.
+    
+    Parameters:
+        conversation_messages (list): Sequence of message-like objects with attributes `role` and `content`; all messages except the last are treated as conversation history and the last is treated as the user's question.
+        max_tokens (int): Maximum number of tokens to request from the LLM when the backend supports a token limit.
+    
     Yields:
-        str: Server-sent event strings ("data: ...\\n\\n") with the LLM's output chunks.
-
+        str: Server-sent event strings of the form "data: <line>\n\n" representing lines of the LLM's streamed output.
+    
     Raises:
-        ValueError: If the question text is empty or only whitespace.
+        ValueError: If `conversation_messages` is empty, if the last message has no `content`, or if the question text is empty or only whitespace.
     """
     # All messages except the last one are treated as history.
     if len(conversation_messages) > 1:

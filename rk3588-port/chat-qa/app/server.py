@@ -29,6 +29,19 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 async def check_health(url: str, server_type: str):
+    """
+    Check remote model server readiness by requesting its health endpoint.
+    
+    Parameters:
+        url (str): The full URL of the server's health endpoint to probe.
+        server_type (str): Human-readable name for the server used in returned details and error messages.
+    
+    Returns:
+        dict: `{'status': 'healthy', 'details': '<server_type> is ready to serve'}` when the endpoint responds with HTTP 200.
+    
+    Raises:
+        HTTPException: 503 when the server responds with a non-200 status or when the request fails.
+    """
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, timeout=5.0)
@@ -49,7 +62,16 @@ async def check_health(url: str, server_type: str):
 
 
 async def check_server_health(host: str, server_type: str):
-    """Route health-check to the correct endpoint based on server hostname prefix."""
+    """
+    Selects the appropriate health-check endpoint for a model server host and delegates the check.
+    
+    Parameters:
+        host (str): Hostname (optionally with port) of the model server.
+        server_type (str): Label identifying the server type used in the returned details.
+    
+    Returns:
+        dict: Health status result as returned by the underlying check (e.g., `{"status": "healthy", "details": "<server_type> is ready to serve"}`).
+    """
     if host.startswith(("vllm", "text", "tei", "llama")):
         return await check_health(f"http://{host}/health", server_type)
     elif host.startswith(("ovms", "openvino")):
@@ -79,16 +101,27 @@ class QuestionRequest(BaseModel):
 
 @app.get("/")
 async def redirect_root_to_docs():
+    """
+    Redirects incoming requests to the API documentation at /docs.
+    
+    Returns:
+        RedirectResponse: HTTP redirect response pointing to "/docs".
+    """
     return RedirectResponse("/docs")
 
 
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint to verify if the LLM and embedding model servers are ready.
-
+    Aggregate health status of the configured LLM and embedding model servers.
+    
+    Checks the environment variables LLM_ENDPOINT_URL and EMBEDDING_ENDPOINT_URL, probes each server's health endpoint, and returns their health results.
+    
     Returns:
-        The status of the LLM and embedding model servers.
+        list[dict]: A list of health status objects for each server. Each object contains at least the keys `status` (e.g., "healthy") and `details` (human-readable message).
+    
+    Raises:
+        HTTPException: 503 if either endpoint environment variable is missing or if any server reports an unhealthy state.
     """
     endpoint_url = os.getenv("LLM_ENDPOINT_URL")
     embedding_endpoint = os.getenv("EMBEDDING_ENDPOINT_URL")
@@ -118,10 +151,15 @@ async def health_check():
 @app.get("/model")
 async def get_llm_model():
     """
-    Endpoint to get the current LLM model name.
-
+    Return the configured LLM model name.
+    
     Returns:
-        The current LLM model name.
+        dict: Response object with keys:
+            - "status": always "success"
+            - "llm_model": the configured LLM model name
+    
+    Raises:
+        HTTPException: with status code 503 if the environment variable `LLM_MODEL_NAME` is not set.
     """
     llm_model = os.getenv("LLM_MODEL_NAME")
     if not llm_model:

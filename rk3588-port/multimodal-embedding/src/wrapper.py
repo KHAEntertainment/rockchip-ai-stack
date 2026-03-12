@@ -41,10 +41,10 @@ class EmbeddingModel:
 
     def __init__(self, model_handler: BaseEmbeddingModel):
         """
-        Initialize with a model handler.
-
-        Args:
-            model_handler: The focused model handler (CLIPHandler, QwenHandler, etc.)
+        Create an EmbeddingModel that wraps a focused BaseEmbeddingModel handler.
+        
+        Parameters:
+            model_handler (BaseEmbeddingModel): The underlying model handler (e.g., CLIPHandler, QwenHandler) that provides encoding methods and exposes `model_config`, `device`, and `supported_modalities`. The wrapper will retain references to these attributes.
         """
         self.handler = model_handler
         self.model_config = model_handler.model_config
@@ -53,13 +53,13 @@ class EmbeddingModel:
 
     def embed_query(self, text: str) -> List[float]:
         """
-        Embed a single text query.
-
-        Args:
-            text: Text string to embed
-
+        Produce an embedding for a single text query.
+        
+        Parameters:
+            text (str): Text to embed.
+        
         Returns:
-            List of embedding values
+            List[float]: Embedding vector for the input text.
         """
         prepared_text = self.handler.prepare_query(text)
         embeddings = self.handler.encode_text([prepared_text])
@@ -67,31 +67,39 @@ class EmbeddingModel:
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
-        Embed multiple text documents.
-
-        Args:
-            texts: List of text strings to embed
-
+        Embed a list of text documents into vector embeddings.
+        
+        Parameters:
+            texts (List[str]): Text strings to be embedded.
+        
         Returns:
-            List of embedding lists
+            List[List[float]]: A list of embeddings, one per input text; each embedding is a list of floats.
         """
         prepared_texts = self.handler.prepare_documents(texts)
         embeddings = self.handler.encode_text(prepared_texts)
         return embeddings.tolist()
 
     def get_embedding_length(self) -> int:
-        """Get the length of the embedding vector."""
+        """
+        Return the dimensionality of embeddings produced by the model handler.
+        
+        Returns:
+            int: The embedding vector length (number of dimensions).
+        """
         return self.handler.get_embedding_dim()
 
     async def get_image_embedding_from_url(self, image_url: str) -> List[float]:
         """
-        Get image embedding from a URL.
-
-        Args:
-            image_url: URL of the image
-
+        Fetches an image from a URL and returns its embedding vector.
+        
+        Parameters:
+            image_url (str): URL of the image to retrieve and embed.
+        
         Returns:
-            List of embedding values
+            List[float]: Embedding vector representing the image.
+        
+        Raises:
+            RuntimeError: If the active model does not support image embeddings or if embedding extraction fails.
         """
         if not self.handler.supports_image():
             raise RuntimeError("Image embeddings are not supported by the active model")
@@ -109,13 +117,16 @@ class EmbeddingModel:
 
     def get_image_embedding_from_base64(self, image_base64: str) -> List[float]:
         """
-        Get image embedding from base64 encoded image.
-
-        Args:
-            image_base64: Base64 encoded image string
-
+        Obtain an image embedding from a base64-encoded image.
+        
+        Parameters:
+            image_base64 (str): Base64-encoded image data.
+        
         Returns:
-            List of embedding values
+            List[float]: Embedding vector for the provided image.
+        
+        Raises:
+            RuntimeError: If the active model does not support images or embedding extraction fails.
         """
         if not self.handler.supports_image():
             raise RuntimeError("Image embeddings are not supported by the active model")
@@ -133,13 +144,16 @@ class EmbeddingModel:
         self, frames_batch: List[List[Union[Image.Image, np.ndarray]]]
     ) -> List[List[float]]:
         """
-        Get video embeddings from frame batches.
-
-        Args:
-            frames_batch: List of list of frames in videos
-
+        Compute embeddings for a batch of videos, returning one embedding per frame.
+        
+        Parameters:
+            frames_batch (List[List[Union[Image.Image, np.ndarray]]]): A list where each element is a list of frames for a video; each frame may be a PIL Image or a NumPy array.
+        
         Returns:
-            List of frame embedding lists (each frame's embedding as a separate list)
+            List[List[float]]: A flat list of per-frame embeddings, where each embedding is a list of floats.
+        
+        Raises:
+            RuntimeError: If the active model does not support video embeddings or if embedding extraction fails.
         """
         if not self.handler.supports_video():
             raise RuntimeError("Video embeddings are not supported by the active model")
@@ -174,7 +188,19 @@ class EmbeddingModel:
     async def get_video_embedding_from_url(
         self, video_url: str, segment_config: dict = None
     ) -> List[List[float]]:
-        """Get video embedding from a URL."""
+        """
+        Extract frames from a video URL and return embeddings for each frame.
+        
+        Parameters:
+            video_url (str): URL of the video to download and process.
+            segment_config (dict, optional): Extraction parameters for segmenting the video (e.g., frame rate, start/end timestamps, segment length). Interpretation depends on the underlying extractor.
+        
+        Returns:
+            List[List[float]]: A list of embedding vectors, one list of floats per extracted frame.
+        
+        Raises:
+            RuntimeError: If the active model does not support video embeddings or if downloading, frame extraction, or embedding fails.
+        """
         if not self.handler.supports_video():
             raise RuntimeError("Video embeddings are not supported by the active model")
         video_path = None
@@ -194,7 +220,19 @@ class EmbeddingModel:
     def get_video_embedding_from_base64(
         self, video_base64: str, segment_config: dict = None
     ) -> List[List[float]]:
-        """Get video embedding from base64 encoded video."""
+        """
+        Compute embeddings for a video provided as a base64-encoded string.
+        
+        Parameters:
+            video_base64 (str): Base64-encoded video data.
+            segment_config (dict, optional): Optional configuration controlling frame extraction (sampling, segments, or other extractor-specific options).
+        
+        Returns:
+            List[List[float]]: A list of embeddings for the extracted frames; each inner list is the embedding vector for one frame.
+        
+        Raises:
+            RuntimeError: If the active model does not support video or if processing (decoding, frame extraction, or embedding) fails.
+        """
         if not self.handler.supports_video():
             raise RuntimeError("Video embeddings are not supported by the active model")
         video_path = None
@@ -214,7 +252,20 @@ class EmbeddingModel:
     async def get_video_embedding_from_file(
         self, video_path: str, segment_config: dict = None
     ) -> List[List[float]]:
-        """Get video embedding from a local file."""
+        """
+        Compute embeddings for frames extracted from a local video file.
+        
+        Parameters:
+            video_path (str): Path to the local video file to process.
+            segment_config (dict, optional): Parameters controlling frame extraction (for example start/end times, fps, or frame selection); passed through to the frame extraction utility.
+        
+        Returns:
+            List[List[float]]: A list of embeddings where each inner list is the embedding vector for a single extracted frame.
+        
+        Raises:
+            FileNotFoundError: If the video file does not exist at video_path.
+            RuntimeError: If the active model does not support video embeddings or if embedding extraction fails.
+        """
         if not self.handler.supports_video():
             raise RuntimeError("Video embeddings are not supported by the active model")
         try:
@@ -232,22 +283,20 @@ class EmbeddingModel:
         self, manifest_path: str
     ) -> List[List[float]]:
         """
-        Get video embedding from frames manifest file.
-
-        Supports two modes:
-        1. Individual frame images: manifest has image_path per frame.
-        2. Video-based processing: manifest has video_path at top level.
-
-        Args:
-            manifest_path: Path to the frames manifest JSON file
-
+        Compute per-frame embeddings from a frames manifest JSON file.
+        
+        Supports video-based manifests (top-level `video_path`) and image-based manifests (per-frame `image_path`), including optimized and legacy video manifest formats; extracts or loads frames, encodes images via the model handler, L2-normalizes embeddings, and returns one embedding vector per frame or crop.
+        
+        Parameters:
+            manifest_path (str): Path to the frames manifest JSON file.
+        
         Returns:
-            List of frame embedding lists (one per frame/crop)
-
+            List[List[float]]: A list of per-frame (or per-crop) embedding vectors.
+        
         Raises:
-            FileNotFoundError: If manifest file doesn't exist (404)
-            ValueError: If manifest structure is invalid (422)
-            RuntimeError: For other processing errors (500)
+            FileNotFoundError: If the manifest file does not exist.
+            ValueError: If the manifest JSON or its structure is invalid or no valid frames/images can be found.
+            RuntimeError: For other processing failures (e.g., extraction/encoding errors or unsupported model capabilities).
         """
         if not self.handler.supports_video():
             raise RuntimeError("Video embeddings are not supported by the active model")
@@ -491,10 +540,10 @@ class EmbeddingModel:
 
     def check_health(self) -> bool:
         """
-        Check the health of the model.
-
+        Perform a lightweight health check by embedding a short test query.
+        
         Returns:
-            bool: True if the model is healthy, False otherwise
+            bool: `True` if the model successfully produces an embedding for the test query, `False` otherwise.
         """
         try:
             self.embed_query("health check")
@@ -504,14 +553,36 @@ class EmbeddingModel:
             return False
 
     def get_supported_modalities(self) -> List[str]:
-        """Return sorted list of supported modalities."""
+        """
+        Get supported modalities as a sorted list.
+        
+        Returns:
+            A list of supported modality names (strings) sorted in ascending order.
+        """
         return sorted(self.supported_modalities)
 
     def supports_text(self) -> bool:
+        """
+        Determine whether the active embedding model supports text inputs.
+        
+        @returns `True` if the active model supports text, `False` otherwise.
+        """
         return self.handler.supports_text()
 
     def supports_image(self) -> bool:
+        """
+        Indicates whether the underlying model handler supports image modality.
+        
+        Returns:
+            True if image embeddings are supported, False otherwise.
+        """
         return self.handler.supports_image()
 
     def supports_video(self) -> bool:
+        """
+        Determine whether the active model supports video inputs.
+        
+        Returns:
+            True if the underlying model handler supports video modality, False otherwise.
+        """
         return self.handler.supports_video()

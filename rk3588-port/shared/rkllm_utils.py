@@ -56,6 +56,14 @@ class RKLLMEmbedder:
         use_npu: bool = False,
         model_dir: str | None = None,
     ) -> None:
+        """
+        Initialize the embedder with model selection and runtime options.
+        
+        Parameters:
+            model_name_or_path (str): HuggingFace model ID or local model directory to load; defaults to DEFAULT_EMBEDDER_MODEL.
+            use_npu (bool): If True, select the NPU execution path; the NPU path is not implemented and will raise NotImplementedError.
+            model_dir (str | None): Local directory for model cache; if None, uses the MODEL_DIR environment variable or "./models".
+        """
         self.model_name_or_path = model_name_or_path
         self.use_npu = use_npu
         self.model_dir = model_dir or os.getenv("MODEL_DIR", "./models")
@@ -67,24 +75,25 @@ class RKLLMEmbedder:
     # ------------------------------------------------------------------
 
     def load_model(self) -> None:
-        """Load model weights into memory."""
+        """
+        Load the tokenizer and model according to the instance's `use_npu` setting.
+        
+        Calls the NPU loading path if `use_npu` is True; otherwise loads the CPU-based model and tokenizer.
+        """
         if self.use_npu:
             self._load_model_npu()
         else:
             self._load_model_cpu()
 
     def encode(self, texts: List[str]) -> np.ndarray:
-        """Encode a list of strings into embedding vectors.
-
-        Parameters
-        ----------
-        texts:
-            One or more text strings to embed.
-
-        Returns
-        -------
-        np.ndarray
-            Shape ``(len(texts), EMBEDDING_DIM)``, dtype float32.
+        """
+        Generate dense embedding vectors for the given input texts.
+        
+        Parameters:
+            texts (List[str]): Input texts to embed; order of embeddings matches input order.
+        
+        Returns:
+            np.ndarray: Array of shape (len(texts), EMBEDDING_DIM) with dtype float32 containing L2-normalized embeddings.
         """
         if self._model is None:
             self.load_model()
@@ -105,6 +114,12 @@ class RKLLMEmbedder:
         #   self._model.load_huggingface(self.model_name_or_path, ...)
         #   self._model.build(do_quantization=True, ...)
         #   self._model.init_runtime(target="rk3588", ...)
+        """
+        Attempt to load the embedding model into an RKLLM NPU runtime.
+        
+        Raises:
+            NotImplementedError: The NPU loading path is not implemented; use the CPU PyTorch fallback by setting `use_npu=False`.
+        """
         raise NotImplementedError(
             "TODO: RKLLM — RKLLMEmbedder NPU path not yet implemented. "
             "Set USE_NPU=false to use the CPU PyTorch fallback."
@@ -112,6 +127,15 @@ class RKLLMEmbedder:
 
     def _encode_npu(self, texts: List[str]) -> np.ndarray:
         # TODO: RKLLM — run inference on NPU and return float32 embeddings
+        """
+        Generate float32 embeddings for each input text using the NPU-based RKLLM runtime.
+        
+        Returns:
+            A NumPy array of shape (len(texts), EMBEDDING_DIM) with dtype `float32`, where each row is the L2-normalized embedding corresponding to the input text at the same index.
+        
+        Raises:
+            NotImplementedError: If the NPU inference path is not implemented or available.
+        """
         raise NotImplementedError(
             "TODO: RKLLM — RKLLMEmbedder._encode_npu not yet implemented."
         )
@@ -121,7 +145,15 @@ class RKLLMEmbedder:
     # ------------------------------------------------------------------
 
     def _load_model_cpu(self) -> None:
-        """Load Qwen3-VL-Embedding-2B on CPU using HuggingFace Transformers."""
+        """
+        Load the embedder model and tokenizer into this instance for CPU inference.
+        
+        Loads the tokenizer and model specified by self.model_name_or_path using HuggingFace Transformers,
+        assigns them to self._tokenizer and self._model, and sets the model to evaluation mode.
+        
+        Raises:
+            ImportError: if `transformers` or `torch` are not installed.
+        """
         try:
             import torch
             from transformers import AutoModel, AutoTokenizer
@@ -146,7 +178,12 @@ class RKLLMEmbedder:
         logger.info("RKLLMEmbedder: model loaded on CPU")
 
     def _encode_cpu(self, texts: List[str]) -> np.ndarray:
-        """Run CPU inference and return L2-normalised embeddings."""
+        """
+        Encode a list of texts on CPU into fixed-size, L2-normalized embeddings.
+        
+        Returns:
+            embeddings (np.ndarray): Array of shape (len(texts), EMBEDDING_DIM) and dtype float32 containing L2-normalized embeddings produced by last-token pooling; rows are padded with zeros or truncated so each embedding has exactly EMBEDDING_DIM elements.
+        """
         import torch
 
         inputs = self._tokenizer(
@@ -207,6 +244,14 @@ class RKLLMReranker:
         use_npu: bool = False,
         model_dir: str | None = None,
     ) -> None:
+        """
+        Initialize the RKLLMReranker with model source and backend selection.
+        
+        Parameters:
+            model_name_or_path (str): HuggingFace model ID or local model directory to load; defaults to DEFAULT_RERANKER_MODEL.
+            use_npu (bool): If True, select the NPU execution path (NPU path is not implemented and will raise NotImplementedError if used). Defaults to False.
+            model_dir (str | None): Local directory to cache or load the model from; if None, uses the environment variable `MODEL_DIR` or "./models".
+        """
         self.model_name_or_path = model_name_or_path
         self.use_npu = use_npu
         self.model_dir = model_dir or os.getenv("MODEL_DIR", "./models")
@@ -218,7 +263,11 @@ class RKLLMReranker:
     # ------------------------------------------------------------------
 
     def load_model(self) -> None:
-        """Load model weights into memory."""
+        """
+        Load the tokenizer and model according to the instance's `use_npu` setting.
+        
+        Calls the NPU loading path if `use_npu` is True; otherwise loads the CPU-based model and tokenizer.
+        """
         if self.use_npu:
             self._load_model_npu()
         else:
@@ -258,6 +307,14 @@ class RKLLMReranker:
         #   self._model.load_huggingface(self.model_name_or_path, ...)
         #   self._model.build(do_quantization=True, ...)
         #   self._model.init_runtime(target="rk3588", ...)
+        """
+        Placeholder for loading the reranker model via an RKLLM NPU path.
+        
+        This function is not implemented for the NPU runtime and signals that the NPU loading path is unavailable; callers should use the CPU PyTorch fallback instead.
+        
+        Raises:
+            NotImplementedError: Always raised to indicate the RKLLM/NPU loading path is not implemented.
+        """
         raise NotImplementedError(
             "TODO: RKLLM — RKLLMReranker NPU path not yet implemented. "
             "Set USE_NPU=false to use the CPU PyTorch fallback."
@@ -265,6 +322,19 @@ class RKLLMReranker:
 
     def _rerank_npu(self, query: str, texts: List[str]) -> List[float]:
         # TODO: RKLLM — run cross-encoder inference on NPU
+        """
+        Perform cross-encoder reranking of candidate texts for a query on NPU hardware.
+        
+        Parameters:
+            query (str): The query string to score against each candidate.
+            texts (List[str]): Candidate passages to be scored; order corresponds to returned scores.
+        
+        Returns:
+            scores (List[float]): A list of scores in [0, 1], one per input text, aligned with `texts`.
+        
+        Raises:
+            NotImplementedError: NPU-based reranking is not implemented.
+        """
         raise NotImplementedError(
             "TODO: RKLLM — RKLLMReranker._rerank_npu not yet implemented."
         )
@@ -274,7 +344,14 @@ class RKLLMReranker:
     # ------------------------------------------------------------------
 
     def _load_model_cpu(self) -> None:
-        """Load Qwen3-VL-Reranker-2B on CPU using HuggingFace Transformers."""
+        """
+        Load the reranker model and tokenizer onto the CPU.
+        
+        Sets self._tokenizer to a tokenizer loaded from the configured model path and self._model to an AutoModelForSequenceClassification instance, then puts the model into evaluation mode.
+        
+        Raises:
+            ImportError: If the `transformers` (and transitively `torch`) package is not installed; suggests installing `transformers` and `torch`.
+        """
         try:
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
         except ImportError as exc:
@@ -298,7 +375,18 @@ class RKLLMReranker:
         logger.info("RKLLMReranker: model loaded on CPU")
 
     def _rerank_cpu(self, query: str, texts: List[str]) -> List[float]:
-        """Tokenise (query, text) pairs, run forward pass, apply sigmoid."""
+        """
+        Score each candidate text for relevance to a query using the loaded reranker model.
+        
+        Processes (query, text) pairs in batches (up to 32) through the model and applies a sigmoid to logits to produce relevance scores.
+        
+        Parameters:
+            query (str): The query string to score against each candidate.
+            texts (List[str]): Candidate passages to be scored.
+        
+        Returns:
+            List[float]: A list of relevance scores in [0, 1], one per input text, in the same order as `texts`.
+        """
         import torch
 
         pairs = [(query, text) for text in texts]

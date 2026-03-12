@@ -43,10 +43,16 @@ config = Settings()
 # ---------------------------------------------------------------------------
 
 async def get_urls_embedding() -> List[str]:
-    """Return distinct URLs whose embeddings are stored in LanceDB.
-
-    Replaces the original SQL JOIN on ``langchain_pg_embedding`` /
-    ``langchain_pg_collection``.
+    """
+    Get the distinct source URLs for embeddings stored in LanceDB.
+    
+    Reads the table's metadata JSON, extracts the "url" field from each entry, and returns a deduplicated list preserving the first-occurrence order.
+    
+    Returns:
+        List[str]: Distinct URLs present in embedding metadata, ordered by first occurrence.
+    
+    Raises:
+        fastapi.HTTPException: With status 500 if the LanceDB read or processing fails.
     """
     try:
         db = lancedb.connect(config.LANCEDB_PATH)
@@ -83,7 +89,15 @@ async def get_urls_embedding() -> List[str]:
 # ---------------------------------------------------------------------------
 
 def is_public_ip(ip: str) -> bool:
-    """Return True only if *ip* is a globally routable public address."""
+    """
+    Check whether an IP address string represents a globally routable public IP.
+    
+    Parameters:
+        ip (str): IP address in string form (IPv4 or IPv6).
+    
+    Returns:
+        `true` if the address is globally routable and not in private, loopback, link-local, reserved, multicast, or unspecified ranges, `false` otherwise.
+    """
     try:
         ip_obj = ipaddress.ip_address(ip)
         return (
@@ -100,14 +114,13 @@ def is_public_ip(ip: str) -> bool:
 
 
 def validate_url(url: str) -> tuple[bool, set[str]]:
-    """Validate URL against scheme, IDNA hostname, DNS resolution, and allowlist.
-
-    Prevents SSRF, DNS-rebinding, and encoding tricks.
-
+    """
+    Validate a URL's safety for fetching by enforcing HTTPS, IDNA hostname normalization, allowlist membership, and public IP resolution.
+    
+    Performs DNS resolution for the URL's hostname and ensures all resolved addresses are globally routable; the returned IP set must be supplied to safe_fetch_url so the actual TCP peer can be verified against the pre-validated addresses.
+    
     Returns:
-        (True, resolved_ips) on success; (False, set()) on any failure.
-        The caller must pass *resolved_ips* to safe_fetch_url so that the
-        actual TCP peer can be verified against the pre-validated set.
+        (True, resolved_ips) on success where `resolved_ips` is a set of resolved IP address strings; (False, set()) on any validation failure.
     """
     try:
         url_cleaned = url.strip().replace("\r", "").replace("\n", "")
@@ -167,11 +180,21 @@ def safe_fetch_url(
     headers: dict,
     resolved_ips: set[str],
 ) -> requests.Response:
-    """Fetch *validated_url* and verify the TCP peer IP against *resolved_ips*.
-
-    Closes the DNS-rebinding window that exists when validate_url and the
-    actual HTTP request use separate DNS lookups.  The connection is kept open
-    (stream=True) until the peer IP is confirmed, then the body is consumed.
+    """
+    Fetch a previously validated URL and ensure the TCP peer IP matches one of the provided resolved IPs.
+    
+    Performs an HTTP GET to the given URL and verifies the connection's remote IP against `resolved_ips`; if the connected peer IP is not in `resolved_ips`, a `ValueError` is raised to indicate a DNS rebinding attempt. If peer-IP verification cannot be performed, the response is returned without raising. The response body is consumed before return so callers may access `response.content` or `response.text`.
+    
+    Parameters:
+        validated_url (str): The URL that has already passed prior validation checks.
+        headers (dict): HTTP headers to include with the request.
+        resolved_ips (set[str]): Set of allowed IP addresses resolved for the URL's hostname.
+    
+    Returns:
+        requests.Response: The HTTP response object with its body consumed.
+    
+    Raises:
+        ValueError: If the connection's peer IP is not one of `resolved_ips` (DNS rebinding detected).
     """
     session = requests.Session()
     response = session.get(
@@ -335,21 +358,19 @@ def ingest_url_to_lancedb(url_list: List[str]) -> dict:
 # ---------------------------------------------------------------------------
 
 async def delete_embeddings_url(url: Optional[str], delete_all: bool = False) -> bool:
-    """Delete embeddings for one URL or all URLs from LanceDB.
-
-    Replaces the original raw-SQL DELETE queries.
-
-    Args:
-        url (Optional[str]): URL to delete; required if *delete_all* is False.
-        delete_all (bool): Delete every URL embedding in the collection.
-
+    """
+    Delete embeddings for a specific URL or for all known URLs from the LanceDB collection.
+    
+    Parameters:
+        url (Optional[str]): Exact URL to delete; required when `delete_all` is False.
+        delete_all (bool): If True, delete embeddings for every URL present in the database.
+    
     Returns:
-        bool: True on success.
-
+        bool: `True` if the requested delete operation completed successfully.
+    
     Raises:
-        HTTPException 404: No URLs present when *delete_all* is True.
-        ValueError: URL not found, or invalid arguments.
-        HTTPException 500: On LanceDB error.
+        HTTPException: 404 if `delete_all` is True but no URLs exist; 500 on LanceDB errors.
+        ValueError: If the provided `url` does not exist or if arguments are invalid.
     """
     try:
         url_list = await get_urls_embedding()

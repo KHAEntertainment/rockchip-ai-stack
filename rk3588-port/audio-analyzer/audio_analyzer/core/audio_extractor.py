@@ -25,18 +25,21 @@ class AudioExtractor:
         audio_format: str = "wav"
     ) -> Path:
         """
-        Extract audio from a video file and save it to disk using MoviePy.
-
-        Args:
-            video_path: Path to the video file
-            output_path: Path to save the extracted audio to (optional)
-            audio_format: Format of the output audio file (default: wav)
-
+        Extract audio from a video file and save it to the given or a default output path.
+        
+        If `output_path` is omitted, the audio is written under settings.AUDIO_DIR with a filename derived from the video's stem and the chosen `audio_format`. The function raises an HTTPException with status 400 if the video contains no audio track and raises a RuntimeError for other failures.
+        
+        Parameters:
+            video_path (Path): Path to the input video file.
+            output_path (Optional[Path]): Destination path for the extracted audio. If None, a path under settings.AUDIO_DIR is used.
+            audio_format (str): Output audio file format (default: "wav").
+        
         Returns:
-            Path to the extracted audio file
-
+            Path: Path to the saved audio file.
+        
         Raises:
-            HTTPException: If the video has no audio stream or another error occurs
+            HTTPException: If the video has no audio stream (status 400).
+            RuntimeError: For other extraction failures.
         """
         logger.info(f"Extracting audio from video file: {video_path}")
         logger.debug(f"Audio format: {audio_format}")
@@ -48,7 +51,17 @@ class AudioExtractor:
             logger.debug(f"Using default output path: {output_path}")
 
         def _blocking_extract() -> Path:
-            """Synchronous extraction — runs in a thread-pool executor."""
+            """
+            Extract audio from the specified video file and write the resulting audio file to the resolved output path.
+            
+            Verifies WAV output properties (sample rate and channel count) when the chosen format is WAV and returns the final file path.
+            
+            Returns:
+                Path: Path to the extracted audio file.
+            
+            Raises:
+                ValueError: If the video file contains no audio stream.
+            """
             logger.debug(f"Opening video file: {video_path}")
             with VideoFileClip(str(video_path)) as video:
                 if video.audio is None:

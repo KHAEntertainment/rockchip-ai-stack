@@ -42,16 +42,14 @@ async def transcribe_video(
     ] = None
 ) -> TranscriptionResponse:
     """
-    Transcribe speech from a video file.
-
-    Upload a video file using multipart/form-data to transcribe its audio content.
-
-    Args:
-        request: Form data containing the uploaded file and transcription settings
-        language: Optional language code for transcription
-
+    Transcribe audio from an uploaded video file.
+    
+    Parameters:
+        request (TranscriptionFormData): Form data containing the uploaded video file and transcription settings (model, device, include_timestamps, etc.).
+        language (str | None): Optional language code for transcription; if None, language will be auto-detected.
+    
     Returns:
-        A response with the transcription status and details
+        TranscriptionResponse: Contains transcription status, message, job_id, transcript_path (stored location), video_name, and video_duration.
     """
 
     try:

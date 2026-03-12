@@ -57,6 +57,18 @@ class TranscriptionFormData:
         ] = True,
         file: Annotated[UploadFile | SkipJsonSchema[None | str], File(description="Select video file to be transcribed.")] = None,
     ):
+        """
+        Dependency object for validating and normalizing transcription multipart form inputs.
+        
+        Parameters:
+            device (DeviceType | str, optional): Device to use for transcription; accepts 'cpu' or 'auto'. If provided as a string, it is stripped and converted to lowercase. Defaults to settings.DEFAULT_DEVICE.
+            model_name (EnabledWhisperModels | str, optional): Whisper model variant to use. If provided as a string, it is stripped and converted to lowercase. Defaults to an empty string (caller may fall back to 'small.en' or the first available model).
+            include_timestamps (bool, optional): Whether to include timestamps in the transcription output. Defaults to True.
+            file (UploadFile | None, optional): Uploaded video file to be transcribed. Defaults to None.
+        
+        Notes:
+            - Initializes minio_bucket, video_id, and video_name to empty strings for compatibility with LocalAudioStore/store_transcript_output signatures; these fields are not used for local uploads.
+        """
         self.file = file
         self.device = device.strip().lower() if isinstance(device, str) else device
         self.model_name = model_name.strip().lower() if isinstance(model_name, str) else model_name

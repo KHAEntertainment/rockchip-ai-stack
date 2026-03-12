@@ -17,16 +17,15 @@ class RequestValidation:
     @staticmethod
     def validate_form_data(request: TranscriptionFormData) -> None:
         """
-        Validate the transcription request.
-
-        Args:
-            request: The transcription request parameters
-
+        Validate a transcription request's inputs and raise an HTTPException for any validation failure.
+        
+        Performs these checks: a file is present, the file size does not exceed settings.MAX_FILE_SIZE, the file is an accepted video format, the optional device (if provided) is a recognized DeviceType, and the optional model (if provided) is enabled in settings.ENABLED_WHISPER_MODELS.
+        
+        Parameters:
+            request (TranscriptionFormData): The transcription form data containing the uploaded file, optional device, and optional model_name.
+        
         Raises:
-            HTTPException: 400 Bad Request — if any validation check fails
-
-        Returns:
-            None
+            HTTPException: 400 Bad Request with an ErrorResponse payload when a validation check fails.
         """
         # A file must always be provided (local filesystem backend only)
         if not request.file:
@@ -68,13 +67,14 @@ class RequestValidation:
     @staticmethod
     def _validate_file_size(file: UploadFile) -> ErrorResponse | None:
         """
-        Validate that the uploaded file size is within allowed limits.
-
-        Args:
-            file: The uploaded file to validate
-
+        Ensure the uploaded file does not exceed the configured maximum size.
+        
+        Parameters:
+            file (UploadFile): The incoming uploaded file whose `size` (in bytes) will be checked.
+        
         Returns:
-            ErrorResponse if validation fails, None if valid
+            ErrorResponse: If the file's size in bytes is greater than settings.MAX_FILE_SIZE.
+            None: If the file is within the allowed size.
         """
         if file and file.size > settings.MAX_FILE_SIZE:
             error_msg = f"File too large. Maximum allowed size is {settings.MAX_FILE_SIZE / (1024 * 1024)} MB"
@@ -88,13 +88,14 @@ class RequestValidation:
     @staticmethod
     def _validate_file_format(video_file: UploadFile) -> ErrorResponse | None:
         """
-        Validate that the uploaded file is a supported video format.
-
-        Args:
-            video_file: The uploaded video file to validate
-
+        Ensure the uploaded file is a supported video format.
+        
+        Parameters:
+            video_file (UploadFile): The uploaded file whose filename will be validated.
+        
         Returns:
-            ErrorResponse if validation fails, None if valid
+            ErrorResponse: Details describing the invalid format if the file is not a supported video.
+            None: If the file is a supported video or no file was provided.
         """
         if video_file and not is_video_file(video_file.filename):
             error_msg = f"Invalid file format: {video_file.filename}. Only video files are supported."
@@ -108,13 +109,15 @@ class RequestValidation:
     @staticmethod
     def _validate_device(device: Optional[str]) -> ErrorResponse | None:
         """
-        Validate that the specified device is supported.
-
-        Args:
-            device: The device to use for transcription
-
+        Validate that a provided device name is one of the supported device types.
+        
+        Performs a case-insensitive check of the supplied device string against the allowed DeviceType values.
+        
+        Parameters:
+            device (Optional[str]): The device name to validate; may be None or an empty string.
+        
         Returns:
-            ErrorResponse if validation fails, None if valid
+            ErrorResponse: An ErrorResponse describing the invalid device when a non-empty device is provided but not supported, `None` if the device is valid or not provided.
         """
         if device and device.strip():
             available_devices = [e.value for e in DeviceType]
@@ -130,13 +133,14 @@ class RequestValidation:
     @staticmethod
     def _validate_model(model: Optional[str]) -> ErrorResponse | None:
         """
-        Validate that the specified model is enabled in the configuration.
-
-        Args:
-            model: The model name to validate
-
+        Confirm that the specified model is enabled in the application configuration.
+        
+        Parameters:
+            model (Optional[str]): The model name to validate; comparison is case-insensitive.
+        
         Returns:
-            ErrorResponse if validation fails, None if valid
+            ErrorResponse: If the model is provided but not listed in settings.ENABLED_WHISPER_MODELS.
+            None: If the model is valid or not provided.
         """
         if model and model.strip():
             available_models = [m.value for m in settings.ENABLED_WHISPER_MODELS]

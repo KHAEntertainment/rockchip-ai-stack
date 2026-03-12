@@ -15,8 +15,9 @@ from audio_analyzer.utils.logger import logger
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifespan context manager for FastAPI application.
-    Handles startup and shutdown events.
+    Manage application startup and shutdown by preparing filesystem and models.
+    
+    Creates the directories defined by settings.OUTPUT_DIR, settings.UPLOAD_DIR, settings.AUDIO_DIR, settings.MODEL_DIR, and settings.STORAGE_PATH if they do not exist, then awaits ModelManager.download_models() to ensure required models are available before the application starts. Logs a shutdown message after the application exits.
     """
     # Create necessary directories
     logger.debug("Creating required directories")

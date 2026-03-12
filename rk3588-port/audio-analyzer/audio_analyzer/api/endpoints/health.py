@@ -11,9 +11,9 @@ router = APIRouter()
 @router.get("/health", response_model=HealthResponse, tags=["Health API"], summary="Health status of API")
 async def health_check() -> HealthResponse:
     """
-    Health check endpoint.
-
+    Return basic service health information.
+    
     Returns:
-        A response indicating the service status, version and a descriptive message.
+        HealthResponse: Object containing the service status, version, and a human-readable message.
     """
     return HealthResponse()

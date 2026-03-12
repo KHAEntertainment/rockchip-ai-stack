@@ -49,19 +49,15 @@ def get_or_create_table(
     db: lancedb.DBConnection,
     table_name: str = DEFAULT_TABLE_NAME,
 ) -> lancedb.table.Table:
-    """Return the named table, creating it with DOCUMENT_SCHEMA if absent.
-
-    Parameters
-    ----------
-    db:
-        An open ``lancedb.connect(...)`` connection.
-    table_name:
-        Logical table name (maps 1-to-1 to ``COLLECTION_NAME`` env var used
-        by both document-ingestion and chat-qa).
-
-    Returns
-    -------
-    lancedb.table.Table
+    """
+    Get a LanceDB table by name, creating it with DOCUMENT_SCHEMA if it does not exist.
+    
+    Parameters:
+        db: An open LanceDB connection (from lancedb.connect).
+        table_name (str): Logical table name; maps 1-to-1 to the COLLECTION_NAME used by document-ingestion and chat-qa.
+    
+    Returns:
+        lancedb.table.Table: The opened or newly created table.
     """
     existing = db.table_names()
     if table_name in existing:
@@ -89,20 +85,16 @@ def delete_by_source(
     table: lancedb.table.Table,
     source_path: str,
 ) -> int:
-    """Delete all rows whose ``source_path`` matches *exactly*.
-
-    Parameters
-    ----------
-    table:
-        An open LanceDB table (from ``get_or_create_table``).
-    source_path:
-        Exact source path string to match (e.g. ``"/uploads/report.pdf"``).
-
-    Returns
-    -------
-    int
-        Number of rows that were present before deletion (approximation based
-        on pre/post row count).
+    """
+    Delete all rows whose `source_path` matches exactly.
+    
+    Parameters:
+        table (lancedb.table.Table): An open LanceDB table.
+        source_path (str): Exact source path to match (e.g. "/uploads/report.pdf").
+    
+    Returns:
+        int: Approximate number of rows removed, computed as the difference between
+        the row count before and after the delete operation.
     """
     before = table.count_rows()
     # LanceDB delete() accepts a SQL-like WHERE expression.

@@ -15,16 +15,16 @@ from audio_analyzer.utils.logger import logger
 
 async def get_video_path(request: TranscriptionFormData) -> Tuple[Path, str]:
     """
-    Get the video path from a direct file upload.
-
-    The MinIO storage path has been removed in this port — only local filesystem
-    uploads are supported.
-
-    Args:
-        request: The transcription request containing the uploaded file
-
+    Obtain the local filesystem path and original filename for an uploaded video file.
+    
+    Parameters:
+        request (TranscriptionFormData): Form data containing the uploaded file (`file`).
+    
     Returns:
-        Tuple[Path, str]: Path to the video file and the original filename
+        tuple: (Path to the saved video file, original filename as a string).
+    
+    Raises:
+        HTTPException: Raised with status 400 when no file is provided in the request.
     """
     if request.file:
         logger.debug(f"Handling direct file upload: {request.file.filename}")
@@ -51,20 +51,17 @@ def store_transcript_output(
     video_id: Optional[str] = None
 ) -> str | None:
     """
-    Store the transcript output using the local filesystem backend.
-
-    MinIO storage has been removed in this port. The transcript is always
-    stored on the local filesystem and its absolute path is returned.
-
-    Args:
-        transcript_path: Path to the local transcript file
-        job_id: Unique job identifier (unused here, kept for API compatibility)
-        original_filename: Original video filename (unused here, kept for API compatibility)
-        minio_bucket: Ignored (kept for API compatibility)
-        video_id: Ignored (kept for API compatibility)
-
+    Obtain the absolute filesystem path for a transcript file.
+    
+    Parameters:
+        transcript_path (Path): Path to the local transcript file.
+        job_id (str): Unused; retained for API compatibility.
+        original_filename (str): Unused; retained for API compatibility.
+        minio_bucket (Optional[str]): Ignored; retained for API compatibility.
+        video_id (Optional[str]): Ignored; retained for API compatibility.
+    
     Returns:
-        str | None: Absolute path to the stored transcript, or None on error
+        str: Absolute path to the transcript file.
     """
     logger.debug(f"Using filesystem storage backend, transcript at: {transcript_path}")
     return str(transcript_path)

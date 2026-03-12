@@ -18,7 +18,14 @@ import os
 
 def default_image_probs(image_features, text_features):
     """
-    Default CLIP-style similarity: cosine similarity scaled by 100, softmaxed.
+    Compute a probability distribution over images for each text embedding using CLIP-style scaled cosine similarity.
+    
+    Parameters:
+        image_features (Tensor): Image feature matrix of shape (num_images, D).
+        text_features (Tensor): Text feature matrix of shape (num_texts, D).
+    
+    Returns:
+        Tensor: A matrix of shape (num_texts, num_images) where each row is a probability distribution over images for the corresponding text (values in [0, 1], rows sum to 1).
     """
     image_probs = (100.0 * text_features @ image_features.T).softmax(dim=-1)
     return image_probs
@@ -94,20 +101,20 @@ MODEL_CONFIGS = {
 
 def get_model_config(model_id: str, device=None, use_npu=None, onnx_path=None, rknn_path=None) -> dict:
     """
-    Get model configuration by model ID with optional parameter overrides.
-
-    Args:
-        model_id: Model identifier in format "type/name" or just "name".
-        device: Device for inference (e.g., "cpu"). Default from env USE_DEVICE or "cpu".
-        use_npu: Whether to use RKLLM/RKNN NPU. Default from env USE_NPU.
-        onnx_path: Path to CLIP vision ONNX file (CPU fallback).
-        rknn_path: Path to CLIP vision RKNN file (NPU).
-
+    Return a resolved model configuration dictionary for the given model identifier with optional runtime overrides.
+    
+    Parameters:
+        model_id (str): Model identifier as "type/name" or just "name"; if only "name" is given, the registry is searched across types.
+        device (str, optional): Inference device override (defaults to USE_DEVICE env or "cpu").
+        use_npu (bool | str | None, optional): Whether to use NPU; if None, resolved from USE_NPU env (truthy values: "true","1","yes","on").
+        onnx_path (str, optional): Path override for CLIP vision ONNX file (defaults to CLIP_ONNX_PATH env or "./models/clip_vision.onnx").
+        rknn_path (str, optional): Path override for CLIP vision RKNN file (defaults to CLIP_RKNN_PATH env or "./models/clip_vision.rknn").
+    
     Returns:
-        dict: Model configuration dictionary.
-
+        dict: A copy of the base model configuration merged with the resolved runtime overrides (includes keys such as "device", "use_npu", "onnx_path", "rknn_path", and "npu_core").
+    
     Raises:
-        ValueError: If model is not found.
+        ValueError: If the model cannot be located or if the specified model type or name is unsupported.
     """
     # Handle both "type/name" and "name" formats.
     if "/" in model_id:

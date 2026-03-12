@@ -25,7 +25,12 @@ class WhisperModel(str, Enum):
 
     @property
     def display_name(self) -> str:
-        """Return a user-friendly display name for the model"""
+        """
+        Return a user-friendly display name for this Whisper model variant.
+        
+        Returns:
+            display_name (str): A human-readable name for the model; falls back to the enum value if no mapping exists.
+        """
         display_names = {
             "tiny": "Tiny (Multilingual)",
             "tiny.en": "Tiny (English)",
@@ -43,7 +48,12 @@ class WhisperModel(str, Enum):
 
     @property
     def description(self) -> str:
-        """Return a description of the model including size and language support"""
+        """
+        Provide a human-readable description of the Whisper model variant.
+        
+        Returns:
+            str: Description of the model's size and language support; "No description available" if the variant is not recognized.
+        """
         descriptions = {
             "tiny": "Multilingual tiny sized whisper model. Significantly less accuracy, extremely fast inference.",
             "tiny.en": "English only version of tiny whisper model. Significantly less accuracy, extremely fast inference.",
@@ -60,7 +70,15 @@ class WhisperModel(str, Enum):
         return descriptions.get(self.value, "No description available")
 
     def to_dict(self) -> dict:
-        """Return all model information as a dictionary"""
+        """
+        Return a dictionary containing the model's id, display name, and description.
+        
+        Returns:
+            dict: Dictionary with keys:
+                - model_id (str): the enum value identifying the model.
+                - display_name (str): user-friendly name for the model.
+                - description (str): descriptive text for the model.
+        """
         return {
             "model_id": self.value,
             "display_name": self.display_name,
