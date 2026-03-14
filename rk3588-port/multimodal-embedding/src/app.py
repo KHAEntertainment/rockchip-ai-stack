@@ -23,7 +23,7 @@ Endpoints:
 - /embeddings:         Generate embeddings
 """
 
-from typing import List, Union, Optional
+from typing import List, Literal, Union, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
@@ -95,51 +95,51 @@ async def startup_event():
 
 class TextInput(BaseModel):
     """Input model for text data."""
-    type: str
+    type: Literal["text"]
     text: Union[str, List[str]]
 
 
 class ImageUrlInput(BaseModel):
     """Input model for image URLs."""
-    type: str
+    type: Literal["image_url"]
     image_url: str
 
 
 class ImageBase64Input(BaseModel):
     """Input model for base64 encoded images."""
-    type: str
+    type: Literal["image_base64"]
     image_base64: str
 
 
 class VideoFramesInput(BaseModel):
     """Input model for video represented as individual frames."""
-    type: str
+    type: Literal["video_frames"]
     video_frames: List[Union[ImageUrlInput, ImageBase64Input]]
 
 
 class VideoUrlInput(BaseModel):
     """Input model for video URLs with segmentation configuration."""
-    type: str
+    type: Literal["video_url"]
     video_url: str
     segment_config: dict
 
 
 class VideoBase64Input(BaseModel):
     """Input model for base64 encoded videos."""
-    type: str
+    type: Literal["video_base64"]
     video_base64: str
     segment_config: dict
 
 
 class VideoFileInput(BaseModel):
     """Input model for local video files."""
-    type: str
+    type: Literal["video_file"]
     video_path: str
     segment_config: dict
 
 
 class FramesBatchInput(BaseModel):
-    type: str
+    type: Literal["frames_batch"]
     frames_manifest_path: str
 
 
@@ -158,6 +158,19 @@ class FrameInfo(BaseModel):
 
     @validator("crop_bbox")
     def validate_bbox(cls, v):
+        """
+        Validate and normalize a crop bounding box.
+        
+        Parameters:
+            cls: The validator class (unused).
+            v (Optional[Sequence[int | float | str]]): A bounding box specified as [x1, y1, x2, y2], or None.
+        
+        Returns:
+            list[int] | None: A list of four non-negative integers [x1, y1, x2, y2] with floats rounded to nearest integer, or None if input was None.
+        
+        Raises:
+            ValueError: If the box does not contain exactly four values, contains non-numeric values, contains negative coordinates, or does not satisfy x1 < x2 and y1 < y2.
+        """
         if v is not None:
             if len(v) != 4:
                 raise ValueError("crop_bbox must have exactly 4 elements [x1, y1, x2, y2]")
@@ -180,6 +193,18 @@ class FramesManifest(BaseModel):
 
     @validator("frames")
     def validate_frames_not_empty(cls, v):
+        """
+        Ensure the frames sequence contains at least one frame.
+        
+        Parameters:
+            v (list): The frames list to validate.
+        
+        Returns:
+            list: The original frames list.
+        
+        Raises:
+            ValueError: If `v` is empty.
+        """
         if not v:
             raise ValueError("frames list cannot be empty")
         return v
@@ -197,7 +222,7 @@ class EmbeddingRequest(BaseModel):
         VideoBase64Input,
         VideoFileInput,
         FramesBatchInput,
-    ]
+    ] = Field(discriminator="type")
     encoding_format: str
 
 
@@ -207,20 +232,34 @@ class EmbeddingRequest(BaseModel):
 
 @app.get("/health")
 async def health_check() -> dict:
-    """Health check endpoint."""
-    global health_status
-    if health_status:
+    """
+    Report the application's health status and perform a runtime model health check.
+
+    Returns:
+        dict: {"status": "healthy"} when the service and model are healthy.
+
+    Raises:
+        HTTPException: with status code 500 when the model is not healthy.
+    """
+    if embedding_model is not None and embedding_model.check_health():
         return {"status": "healthy"}
-    elif embedding_model is not None and embedding_model.check_health():
-        health_status = True
-        return {"status": "healthy"}
-    else:
-        raise HTTPException(status_code=500, detail="Model is not healthy")
+    raise HTTPException(status_code=500, detail="Model is not healthy")
 
 
 @app.get("/models")
 async def list_models() -> dict:
-    """List all available models."""
+    """
+    Provide the server's current model name, the available models grouped by source, and the total number of models.
+    
+    Returns:
+        result (dict): Dictionary with keys:
+            - "current_model" (str): Name of the model currently configured on the server.
+            - "available_models" (dict): Mapping of source -> list of available model names.
+            - "total_models" (int): Total count of available models across all sources.
+    
+    Raises:
+        HTTPException: If an error occurs while retrieving the list of models.
+    """
     try:
         available_models = list_available_models()
         current_model = settings.EMBEDDING_MODEL_NAME
@@ -236,7 +275,15 @@ async def list_models() -> dict:
 
 @app.get("/model/current")
 async def get_current_model() -> dict:
-    """Get the currently loaded model name and basic configuration."""
+    """
+    Return current model configuration.
+    
+    Returns:
+        info (dict): Dictionary with keys:
+            - model (str): name of the loaded embedding model.
+            - device (str): device where the model runs (e.g., "cpu", "cuda").
+            - use_npu (bool): True if the model is configured to use the NPU, False otherwise.
+    """
     return {
         "model": settings.EMBEDDING_MODEL_NAME,
         "device": settings.EMBEDDING_DEVICE,
@@ -247,7 +294,20 @@ async def get_current_model() -> dict:
 
 @app.get("/model/capabilities")
 async def get_model_capabilities() -> dict:
-    """Expose supported modalities for the loaded model."""
+    """
+    Return the loaded model's supported modalities and capability flags.
+    
+    Returns:
+        info (dict): Dictionary with:
+            - "model" (str): configured model name.
+            - "modalities" (list): list of modality identifiers supported by the model.
+            - "supports_text" (bool): `true` if the model supports text embeddings, `false` otherwise.
+            - "supports_image" (bool): `true` if the model supports image embeddings, `false` otherwise.
+            - "supports_video" (bool): `true` if the model supports video embeddings, `false` otherwise.
+    
+    Raises:
+        HTTPException: with status code 503 if the model has not been initialized.
+    """
     if embedding_model is None:
         raise HTTPException(status_code=503, detail="Model is not initialized")
     return {
@@ -262,13 +322,18 @@ async def get_model_capabilities() -> dict:
 @app.post("/embeddings")
 async def create_embedding(request: EmbeddingRequest) -> dict:
     """
-    Creates an embedding based on the input data.
-
-    Args:
-        request: Request object containing model and input data.
-
+    Generate an embedding for the provided multimodal input using the currently loaded model.
+    
+    Validates that the requested model matches the server's active model, that the model is initialized, and that the active model supports the requested input modality. Processes text, image (URL or base64), and video inputs (frames, URL, base64, file, or frames manifest) and returns the computed embedding(s).
+    
+    Parameters:
+        request (EmbeddingRequest): Request containing the target model name and the input payload.
+    
     Returns:
-        dict with key "embedding" containing the embedding values.
+        dict: A mapping with key "embedding" whose value is either a single embedding vector or a list of embedding vectors depending on the input.
+    
+    Raises:
+        HTTPException: For model mismatch, uninitialized model, unsupported input types, invalid input data or paths, missing files (404), validation errors (422), and other internal errors (4xx/5xx).
     """
     try:
         if request.model != settings.EMBEDDING_MODEL_NAME:

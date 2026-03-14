@@ -71,6 +71,24 @@ class QwenEmbeddingHandler(BaseEmbeddingModel):
     INSTRUCTION_TEMPLATE = "Instruct: {task_description}\nQuery:{query}"
 
     def __init__(self, model_config: Dict[str, Any]):
+        """
+        Initialize the embedding handler from a configuration mapping and prepare either the CPU or RKLLM NPU execution path.
+        
+        Parameters:
+            model_config (Dict[str, Any]): Configuration dictionary. Required key:
+                - "hf_model_id": HuggingFace model identifier to load.
+            Optional keys and defaults:
+                - "modalities": list, defaults to ["text"] (ensured by the constructor).
+                - "max_length": int, tokenizer maximum sequence length (default 8192).
+                - "task_description": str, description inserted into instruction templates.
+                - "instruction_template": str, template used to wrap queries.
+                - "trust_remote_code": bool, whether to allow remote code when loading HF artifacts (default True).
+                - "revision": str | None, model revision to load.
+                - "use_npu": bool, if True instantiate shared.rkllm_utils.RKLLMEmbedder for RKLLM NPU execution; otherwise prepare for CPU path.
+        
+        Notes:
+            When "use_npu" is True, an RKLLMEmbedder is instantiated lazily during initialization and assigned to self._rkllm.
+        """
         config = dict(model_config)
         config.setdefault("modalities", ["text"])
         super().__init__(config)
@@ -105,10 +123,10 @@ class QwenEmbeddingHandler(BaseEmbeddingModel):
     # ------------------------------------------------------------------
 
     def load_model(self) -> None:
-        """Load tokenizer and model weights.
-
-        NPU path: delegates to RKLLMEmbedder.load_model() (TODO stub).
-        CPU path: loads via HuggingFace AutoModel on CPU.
+        """
+        Load the embedding tokenizer and model for the configured execution path.
+        
+        When configured to use the NPU, delegate model loading to the RKLLMEmbedder instance (this may raise NotImplementedError until the RKLLM SDK is available). When using the CPU path, load the HuggingFace tokenizer and model for the configured model identifier and prepare the model for inference.
         """
         if self.use_npu:
             # TODO: RKLLM — load Qwen3-VL-Embedding-2B via RKLLM SDK
@@ -138,20 +156,19 @@ class QwenEmbeddingHandler(BaseEmbeddingModel):
         logger.info("Qwen model loaded successfully on CPU")
 
     def encode_text(self, texts: Union[str, List[str]]) -> torch.Tensor:
-        """Encode a list of text strings into L2-normalised 2048-dim embeddings.
-
-        NPU path: delegates to RKLLMEmbedder.encode() and returns a torch.Tensor
-                  so callers can use .tolist() uniformly.
-        CPU path: runs tokenisation + AutoModel forward pass on CPU.
-
-        Args:
-            texts: Single string or list of strings.
-
+        """
+        Encode one or more text strings into L2-normalized 2048-dimensional embeddings.
+        
+        The returned embeddings are float32, L2-normalized per row, and shaped (N, 2048), where N is the number of input texts. For the NPU execution path, encoding is delegated to the RKLLM embedder and converted to a torch.Tensor; for the CPU path, the HuggingFace model is used.
+        
         Returns:
-            torch.Tensor of shape (N, 2048), dtype float32, L2-normalised.
+            torch.Tensor: Embeddings of shape (N, 2048), dtype float32, L2-normalized.
         """
         if isinstance(texts, str):
             texts = [texts]
+
+        if self.model is None or self.tokenizer is None:
+            self.load_model()
 
         if self.use_npu:
             # TODO: RKLLM — encode via RKLLM NPU
@@ -198,13 +215,24 @@ class QwenEmbeddingHandler(BaseEmbeddingModel):
         return embeddings
 
     def encode_image(self, images):  # pragma: no cover
+        """
+        Placeholder for image encoding; this handler does not support processing images or videos.
+        
+        Raises:
+            NotImplementedError: Always raised with guidance to use CLIPHandler for image/video embeddings.
+        """
         raise NotImplementedError(
             "QwenEmbeddingHandler does not support image encoding. "
             "Use CLIPHandler for image/video embeddings."
         )
 
     def convert_to_openvino(self, ov_models_dir: str) -> tuple:
-        """Not applicable for this port — returns empty tuple."""
+        """
+        No-op OpenVINO conversion for the RK3588 port; OpenVINO is not supported.
+        
+        Returns:
+            An empty tuple.
+        """
         logger.warning(
             "convert_to_openvino() called on QwenEmbeddingHandler; "
             "OpenVINO is not supported in the RK3588 port."
@@ -212,7 +240,14 @@ class QwenEmbeddingHandler(BaseEmbeddingModel):
         return ()
 
     def get_embedding_dim(self) -> int:
-        """Return the embedding dimension (2048 for Qwen3-VL-Embedding-2B)."""
+        """
+        Get the model's embedding vector dimensionality.
+        
+        If already known, returns the cached value; otherwise probes the model by encoding a short dummy input and caches the resulting dimension.
+        
+        Returns:
+            embedding_dim (int): The number of elements in each embedding vector.
+        """
         if self._embedding_dim is not None:
             return self._embedding_dim
         # Probe by running a single short encode.
@@ -222,7 +257,15 @@ class QwenEmbeddingHandler(BaseEmbeddingModel):
         return self._embedding_dim
 
     def prepare_query(self, text: str) -> str:
-        """Wrap a query with the instruction template."""
+        """
+        Format a user query using the handler's instruction template and task description.
+        
+        Parameters:
+            text (str): The raw query string to be wrapped.
+        
+        Returns:
+            formatted (str): The query string inserted into the handler's instruction template with the task description.
+        """
         return self.instruction_template.format(
             task_description=self.task_description,
             query=text,

@@ -48,11 +48,11 @@ class TranscriptionService:
 
     def __init__(self, model_name: Optional[str] = None, device: Optional[DeviceType] = None):
         """
-        Initialize the transcription service.
-
-        Args:
-            model_name: Name of the Whisper model to use
-            device: Device to use for inference ('cpu' or 'auto')
+        Create a TranscriptionService configured to use a specified Whisper model and target device.
+        
+        Parameters:
+            model_name (Optional[str]): Whisper model identifier to use for transcription; if omitted, the service uses the default model from settings.
+            device (Optional[DeviceType]): Device preference for inference (e.g., CPU or automatic selection); if omitted, the service uses the default device from settings.
         """
         logger.debug("Initializing TranscriptionService")
         self.model = None
@@ -67,16 +67,12 @@ class TranscriptionService:
 
     def _determine_backend(self) -> TranscriptionBackend:
         """
-        Determine which backend to use based on device type.
-
-        The explicit *device* parameter passed to __init__ takes priority.
-        Only when no explicit device was given is DEFAULT_BACKEND consulted.
-
-        On RK3588 the only working day-1 backend is whisper_cpp (CPU).
-        The RKNN_NPU backend is a TODO stub.
-
+        Select the transcription backend based on the explicit device selection and configured default.
+        
+        Checks the explicit device set on the service first; if no explicit CPU request is present, consults the configured DEFAULT_BACKEND and falls back to the whisper_cpp (CPU) backend when no other supported backend is selected.
+        
         Returns:
-            The appropriate transcription backend
+            The chosen TranscriptionBackend.
         """
         logger.debug("Determining appropriate transcription backend")
 
@@ -98,7 +94,12 @@ class TranscriptionService:
 
     def _load_model(self):
         """
-        Load the appropriate Whisper model based on the backend.
+        Ensure the configured Whisper model is loaded into self.model for the selected backend.
+        
+        If the model is already loaded this method returns immediately. For the whisper_cpp backend it locates the GGML model file, computes an appropriate CPU thread count, and instantiates the pywhispercpp Model assigned to self.model. For unsupported or unimplemented backends a RuntimeError is raised.
+        
+        Raises:
+            RuntimeError: If the model cannot be loaded or an unexpected backend is configured.
         """
         if self.model is not None:
             logger.debug("Model already loaded, skipping initialization")
@@ -156,16 +157,19 @@ class TranscriptionService:
         video_duration: Optional[float] = None
     ) -> Tuple[str, Path]:
         """
-        Transcribe audio using the selected backend.
-
-        Args:
-            audio_path: Path to the audio file
-            language: Language code for transcription (optional)
-            include_timestamps: Whether to include timestamps in the output
-            video_duration: Duration of the video in seconds (optional)
-
+        Transcribe an audio file and write output files (TXT and optionally SRT) to the configured output directory.
+        
+        Parameters:
+            audio_path (Path): Path to the source audio file.
+            language (Optional[str]): ISO language code to force transcription language; if omitted, the default from settings is used.
+            include_timestamps (bool): If true, an SRT with timestamps is written in addition to plain text.
+            video_duration (Optional[float]): Duration of the media in seconds; when provided, it is used to scale the number of processors for transcription.
+        
         Returns:
-            Tuple containing the job ID and path to the transcription file
+            Tuple[str, Path]: A tuple containing the job ID (last 8 characters of a generated UUID) and the Path to the transcription file produced (SRT if `include_timestamps` is true, otherwise TXT).
+        
+        Raises:
+            RuntimeError: If transcription fails for any reason.
         """
         logger.info(f"Starting transcription for audio: {audio_path}")
         logger.debug(
@@ -224,15 +228,15 @@ class TranscriptionService:
         video_duration: Optional[float] = None
     ) -> None:
         """
-        Transcribe using whisper.cpp backend with pywhispercpp package.
-
-        Args:
-            audio_path: Path to the audio file
-            srt_path: Output path for SRT file
-            txt_path: Output path for text file
-            language: Language code
-            include_timestamps: Whether to include timestamps
-            video_duration: Duration of the video in seconds
+        Transcribe an audio file using the whisper.cpp backend (pywhispercpp) and write TXT output and optional SRT timestamps.
+        
+        Parameters:
+            audio_path (Path): Path to the input audio file to transcribe.
+            srt_path (Path): Destination path for the SRT (subtitle) file when timestamps are requested.
+            txt_path (Path): Destination path for the plain text transcription file.
+            language (Optional[str]): Language code to force transcription language (e.g., "en"); if None, the service default is used.
+            include_timestamps (bool): If True, write an SRT file with timestamps in addition to the TXT file.
+            video_duration (Optional[float]): Duration of the media in seconds; when provided and > 0, used to determine the number of parallel processors for transcription.
         """
         logger.debug("Preparing whispercpp transcription parameters")
 
@@ -258,7 +262,6 @@ class TranscriptionService:
                 logger.debug(f"Using default {n_processors} processor(s) as video duration is unknown")
 
             params["beam_search"] = {"beam_size": 5, "patience": 1.5}  # Use small beam size for faster inference
-            params["greedy"] = {"best_of": 1}    # Only consider one candidate
 
             # Perform transcription
             logger.debug(f"Starting whispercpp transcription with {n_processors} processors")
@@ -266,6 +269,7 @@ class TranscriptionService:
             segments = self.model.transcribe(
                 str(audio_path),
                 n_processors=n_processors,
+                params_sampling_strategy=1,
                 **params
             )
 

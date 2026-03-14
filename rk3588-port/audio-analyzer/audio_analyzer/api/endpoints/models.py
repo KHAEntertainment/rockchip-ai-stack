@@ -18,15 +18,10 @@ router = APIRouter()
 )
 async def get_available_models() -> AvailableModelsResponse:
     """
-    Get a list of available Whisper model variants that can be used for transcription.
-
-    This endpoint returns all the whisper models that are configured in the service
-    and available for transcription requests, along with detailed information including
-    display names, descriptions, and the default model that is used when no specific
-    model is requested.
-
+    Return available Whisper transcription models configured in the service.
+    
     Returns:
-        A response with the list of available models with their details and the default model
+        AvailableModelsResponse: Contains `models` — a list of WhisperModelInfo objects describing each enabled model, and `default_model` — the default model name used when none is specified.
     """
     logger.debug("Getting available models details")
 

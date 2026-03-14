@@ -42,31 +42,42 @@ _MODEL_CONFIG_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def load_local_image_trusted(path: Union[str, "Path"]) -> Image.Image:
-    """Open a local image file from a *trusted* internal path.
-
-    This helper exists for code paths where *path* has already been validated
-    by internal logic (e.g., a temp file written by ``decode_and_save_video``).
-    It must **never** be called with user-supplied input directly.
+    """
+    Open a local image file from a trusted internal path.
+    
+    This must only be used with paths that have been validated by internal logic (for example, a temporary file created by decode_and_save_video); do not call this with untrusted user input.
+    
+    Returns:
+        A PIL Image converted to RGB mode.
     """
     return Image.open(path).convert("RGB")
 
 
 def is_base64_image_data(value: str) -> bool:
-    """Return True when *value* looks like a data-URI base64 image."""
+    """
+    Detects whether a string is a base64-encoded image data URI.
+    
+    Parameters:
+        value (str): The string to inspect.
+    
+    Returns:
+        bool: `True` if the string starts with "data:image/" and contains ";base64,", `False` otherwise.
+    """
     if not value:
         return False
     return value.startswith("data:image/") and ";base64," in value
 
 
 def decode_base64_image(value: str) -> Image.Image:
-    """Decode a base64 data-URI string into a PIL RGB image.
-
-    Args:
-        value: A string of the form ``data:image/<fmt>;base64,<payload>``.
-
+    """
+    Decode a base64 image data-URI into a PIL Image in RGB mode.
+    
+    Parameters:
+        value (str): Data-URI of the form "data:image/<format>;base64,<payload>".
+    
     Returns:
-        PIL.Image.Image: Decoded image converted to RGB.
-
+        PIL.Image.Image: The decoded image converted to RGB.
+    
     Raises:
         ValueError: If the header is not a valid base64 image data URI.
     """
@@ -89,27 +100,21 @@ async def load_images(
     https_proxy: Optional[str] = None,
     no_proxy: Optional[str] = None,
 ) -> Tuple[List[Image.Image], List[np.ndarray]]:
-    """Load images from URLs, base64 data-URIs, or local file paths.
-
-    This is a pure-numpy port of the original function; the second return
-    value contains ``np.ndarray`` objects (shape ``(1, H, W, 3)``, dtype
-    ``uint8``) instead of ``ov.Tensor`` instances.
-
-    Args:
-        image_urls_or_files: Sources to load — HTTP/HTTPS URLs, base64
-            data-URIs, or local filesystem paths.
-        http_proxy:  Optional HTTP proxy URL.
-        https_proxy: Optional HTTPS proxy URL.
-        no_proxy:    Comma-separated list of host fragments that bypass the
-                     proxy.
-
+    """
+    Load images from HTTP(S) URLs, base64 data URIs, or local file paths and return PIL images with corresponding NHWC uint8 numpy arrays.
+    
+    Parameters:
+        image_urls_or_files (List[str]): Sources to load — HTTP/HTTPS URLs, base64 data-URIs, or local filesystem paths.
+        http_proxy (Optional[str]): HTTP proxy URL to use for http:// sources if not bypassed by no_proxy.
+        https_proxy (Optional[str]): HTTPS proxy URL to use for https:// sources if not bypassed by no_proxy.
+        no_proxy (Optional[str]): Comma-separated host substrings; if any substring appears in a source URL, the proxy is not used for that source.
+    
     Returns:
-        Tuple of (images, arrays) where *images* is a list of PIL images and
-        *arrays* is a list of NHWC uint8 numpy arrays.
-
+        Tuple[List[Image.Image], List[np.ndarray]]: A pair (images, arrays) where `images` is a list of PIL.Image objects in RGB mode and `arrays` is a list of numpy arrays shaped `(1, H, W, 3)` with dtype `uint8` (NHWC).
+    
     Raises:
-        RuntimeError: If a remote fetch or file-open operation fails.
-        ValueError:   If base64 padding is invalid.
+        RuntimeError: On HTTP fetch failures or other I/O errors.
+        ValueError: If base64 data has invalid padding or an unsupported source type is provided.
     """
     images: List[Image.Image] = []
     image_arrays: List[np.ndarray] = []
@@ -195,6 +200,12 @@ def get_best_video_backend() -> str:
     preferred_order = ["decord", "pyav", "torchcodec", "torchvision", "opencv"]
 
     def _is_torchcodec_available() -> bool:
+        """
+        Detects whether the `torchcodec` package is importable in the current runtime.
+        
+        @returns:
+            `True` if `torchcodec` can be imported, `False` otherwise.
+        """
         try:
             import torchcodec  # type: ignore  # noqa: F401
             return True
@@ -269,21 +280,21 @@ def decode_and_save_video(
 def _video_tensor_to_numpy(
     video_tensor: Union["torch.Tensor", np.ndarray],  # noqa: F821
 ) -> np.ndarray:
-    """Convert a torch or numpy video tensor to a THWC numpy array.
-
-    If a ``torch.Tensor`` is supplied it is expected to have TCHW layout and
-    will be permuted to THWC.  A numpy array is assumed to already be THWC
-    and is returned unchanged.
-
-    Args:
-        video_tensor: Video data as a ``torch.Tensor`` (TCHW) or
-            ``np.ndarray`` (THWC).
-
+    """
+    Return a video array in (frames, height, width, channels) layout.
+    
+    If given a PyTorch tensor with TCHW layout, it is converted to THWC. NumPy
+    arrays are assumed to already be in THWC and returned unchanged.
+    
+    Parameters:
+        video_tensor (Union["torch.Tensor", np.ndarray]): Video data as a PyTorch
+            tensor in TCHW layout or a NumPy array in THWC layout.
+    
     Returns:
-        np.ndarray: Array with shape ``(frames, height, width, channels)``.
-
+        np.ndarray: Array with shape (frames, height, width, channels).
+    
     Raises:
-        TypeError:  If the input is neither a Tensor nor an ndarray.
+        TypeError: If the input is neither a PyTorch tensor nor a NumPy ndarray.
         ValueError: If the resulting array does not have exactly 4 dimensions.
     """
     try:
@@ -370,11 +381,27 @@ def extract_qwen_video_frames(
 
 
 def _resolve_config_cache_key(config_path: Path) -> str:
+    """
+    Produce a stable string key for caching based on the provided filesystem path.
+    
+    Parameters:
+        config_path (Path): Path to a configuration file or directory; may contain user (~) components.
+    
+    Returns:
+        key (str): String form of the path after expanding user components and resolving to an absolute path without requiring the path to exist.
+    """
     return str(Path(config_path).expanduser().resolve(strict=False))
 
 
 def _load_model_config_data(config_path: Path) -> Dict[str, Any]:
-    """Load and cache model configuration YAML for a given path."""
+    """
+    Load and cache model configuration data from a YAML file.
+    
+    Caches the parsed mapping keyed by the resolved config path so subsequent calls return the cached data without re-reading the file.
+    
+    Returns:
+        config (Dict[str, Any]): Mapping loaded from the YAML file, or an empty dict if the file contains no data.
+    """
     global _MODEL_CONFIG_CACHE
     cache_key = _resolve_config_cache_key(config_path)
     if cache_key not in _MODEL_CONFIG_CACHE:
@@ -387,17 +414,18 @@ def _load_model_config_data(config_path: Path) -> Dict[str, Any]:
 def load_model_config(
     model_name: str, config_path: Path = Path("config/model_config.yaml")
 ) -> Dict[str, Any]:
-    """Load per-model configuration from a YAML file.
-
-    Args:
-        model_name:  Case-insensitive model name to look up.
-        config_path: Path to the YAML configuration file.
-
+    """
+    Load per-model configuration from a YAML file.
+    
+    Parameters:
+        model_name (str): Case-insensitive model name to look up.
+        config_path (Path): Path to the YAML configuration file.
+    
     Returns:
-        dict: Configuration mapping for the model (empty dict if not found).
-
+        dict: Configuration mapping for the model; empty dict if the file is missing or the model is not found.
+    
     Raises:
-        RuntimeError: If the YAML file cannot be parsed.
+        RuntimeError: If the YAML file cannot be parsed or another error occurs while loading configuration.
     """
     try:
         configs = _load_model_config_data(config_path)
@@ -418,7 +446,14 @@ def load_model_config(
 def _get_video_supported_patterns(
     config_path: Path = Path("config/model_config.yaml"),
 ) -> List[str]:
-    """Return lower-cased model name patterns that support native video input."""
+    """
+    Return lower-cased string patterns for models that support native video input.
+    
+    Returns:
+        patterns (List[str]): A list of lower-cased model-name patterns extracted from the
+        config's `video_supported_models` entry. Returns an empty list if no patterns are
+        present or the config cannot be read/parsed.
+    """
     try:
         configs = _load_model_config_data(config_path)
     except FileNotFoundError:
@@ -439,17 +474,19 @@ def model_supports_video(
     model_name: Optional[str],
     config_path: Path = Path("config/model_config.yaml"),
 ) -> bool:
-    """Return True if *model_name* is listed as a video-capable model.
-
-    Args:
-        model_name:  Name of the model to check (case-insensitive).
-        config_path: Path to the YAML config file that lists
-                     ``video_supported_models``.
-
+    """
+    Check whether a model name matches any configured video-capable model pattern.
+    
+    The comparison is case-insensitive; an empty or missing `model_name` returns `False`.
+    
+    Parameters:
+        model_name (Optional[str]): The model name to check.
+        config_path (Path): Path to the YAML config file that contains a
+            `video_supported_models` list of string patterns.
+    
     Returns:
-        bool: ``True`` when the model name contains one of the configured
-        video-support patterns; ``False`` otherwise or when *model_name* is
-        empty.
+        True if `model_name` contains any non-empty pattern from the configured
+        `video_supported_models` (case-insensitive), `False` otherwise.
     """
     if not model_name:
         return False

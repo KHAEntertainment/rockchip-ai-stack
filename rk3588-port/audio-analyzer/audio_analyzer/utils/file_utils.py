@@ -18,14 +18,17 @@ _UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1 MiB
 
 async def save_upload_file(file: UploadFile, upload_dir: Optional[Path] = None) -> Path:
     """
-    Save an uploaded file to disk.
-
-    Args:
-        file: The uploaded file
-        upload_dir: Directory to save the file to (uses settings.UPLOAD_DIR if not provided)
-
+    Save an uploaded FastAPI `UploadFile` to disk using a UUID-prefixed, filesystem-safe filename.
+    
+    Parameters:
+        file (UploadFile): The uploaded file object to persist.
+        upload_dir (Path | None): Destination directory. If omitted, `settings.UPLOAD_DIR` is used.
+    
     Returns:
-        Path to the saved file
+        Path: Filesystem path to the saved file (includes the UUID-prefixed filename).
+    
+    Raises:
+        RuntimeError: If the upload directory cannot be created or the file cannot be written.
     """
     logger.info(f"Saving uploaded file: {file.filename}")
 
@@ -72,13 +75,13 @@ async def save_upload_file(file: UploadFile, upload_dir: Optional[Path] = None) 
 
 def get_file_duration(file_path: Path) -> float:
     """
-    Get the duration of a media file in seconds.
-
-    Args:
-        file_path: Path to the media file
-
+    Determine the duration of a media file in seconds.
+    
+    Parameters:
+        file_path (Path): Path to the media file.
+    
     Returns:
-        Duration in seconds
+        duration_seconds (float): Duration of the media in seconds; returns 0.0 if the duration cannot be determined or an error occurs.
     """
     logger.debug(f"Getting duration of file: {file_path}")
 
@@ -97,13 +100,10 @@ def get_file_duration(file_path: Path) -> float:
 
 def is_video_file(file_name: str) -> bool:
     """
-    Check if a file is a video based on its extension.
-
-    Args:
-        file_name: Name of the file
-
+    Determine whether a filename corresponds to a video file by its extension.
+    
     Returns:
-        True if the file is a video, False otherwise
+        True if the file extension is a known video extension, False otherwise.
     """
     video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv', '.mpg', '.mpeg'}
     extension = Path(file_name).suffix.lower()

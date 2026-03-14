@@ -69,13 +69,26 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DEBUG(self) -> bool:
-        """Determine if the application is running in debug mode based on environment"""
+        """
+        Whether the application is running in development mode.
+        
+        @returns
+            `true` if `FASTAPI_ENV` equals "development" (case-insensitive), `false` otherwise.
+        """
         return self.FASTAPI_ENV.lower() == "development"
 
     @computed_field
     @property
     def AUDIO_FORMAT_PARAMS(self) -> dict:
-        """Get audio format parameters based on configured settings"""
+        """
+        Provide audio format parameters derived from the current audio settings.
+        
+        Returns:
+            dict: Mapping with keys:
+                - "fps": sample rate in Hertz.
+                - "nbytes": bytes per audio sample (bit depth divided by 8).
+                - "nchannels": number of audio channels.
+        """
         return {
             "fps": self.AUDIO_SAMPLE_RATE,
             "nbytes": self.AUDIO_BIT_DEPTH // 8,
@@ -87,7 +100,12 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def GGML_MODEL_DIR(self) -> Path:
-        """Alias for MODEL_DIR — path to GGML model files."""
+        """
+        Path to the GGML Whisper model files.
+        
+        Returns:
+            Path: Path object pointing to the GGML model directory.
+        """
         return self.MODEL_DIR
 
     # Convert the EnabledWhisperModels to Enum type for better validation
@@ -95,8 +113,10 @@ class Settings(BaseSettings):
     @property
     def EnabledWhisperModelsEnum(self) -> Type[Enum]:
         """
-        Creates a dynamic Enum class with enabled whisper models.
-        This allows for proper type validation in request schemas.
+        Return a dynamically created Enum type whose members correspond to the currently enabled Whisper models.
+        
+        Returns:
+            enabled_enum (Type[Enum]): An Enum class named `EnabledWhisperModels` with members whose names are the enabled model names and whose values are the corresponding WhisperModel values.
         """
         models = self.ENABLED_WHISPER_MODELS
         return Enum('EnabledWhisperModels', {model.name: model.value for model in models})
@@ -104,7 +124,18 @@ class Settings(BaseSettings):
     @field_validator("ENABLED_WHISPER_MODELS", mode="before")
     @classmethod
     def create_enabled_model_list(cls, v: Any) -> List[WhisperModel]:
-        """Convert comma-separated string value from env vars to a list of WhisperModel"""
+        """
+        Parse a comma-separated string into a list of WhisperModel values.
+        
+        Parameters:
+            v (Any): The raw value (typically from environment) representing enabled models. If `v` is a non-empty string, it is split on commas and each item is converted to a `WhisperModel`.
+        
+        Returns:
+            List[WhisperModel]: The list of parsed `WhisperModel` instances.
+        
+        Raises:
+            ValueError: If `v` contains values that are not valid `WhisperModel` names; the error message lists valid options.
+        """
         try:
             if isinstance(v, str) and (v := v.strip()):
                 return [WhisperModel(item.strip().lower()) for item in v.split(",") if item.strip()]
@@ -120,8 +151,19 @@ class Settings(BaseSettings):
     @field_validator("DEFAULT_WHISPER_MODEL", mode="before")
     @classmethod
     def validate_default_whisper_model(cls, v: Any, info) -> WhisperModel | None:
-        """Validate the default whisper model against the list of enabled models.
-        If no default model is provided, return the small.en model if available or first enabled model.
+        """
+        Validate and normalize the configured default Whisper model against the enabled models.
+        
+        Parameters:
+            cls: The Settings class (validator bound method).
+            v (Any): The provided default model value; may be a string, WhisperModel, or None.
+            info: Validator context containing other field values (used to read 'ENABLED_WHISPER_MODELS').
+        
+        Returns:
+            WhisperModel | None: A WhisperModel instance chosen from enabled models, or None if no enabled models exist.
+        
+        Raises:
+            ValueError: If `v` is a string that does not match any enabled Whisper model.
         """
         try:
             enabled_models = info.data.get('ENABLED_WHISPER_MODELS', [])

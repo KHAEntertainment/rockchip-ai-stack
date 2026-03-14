@@ -10,13 +10,15 @@ from audio_analyzer.core.settings import settings
 
 def setup_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Configure and return a logger with the specified name.
-
-    Args:
-        name: Name for the logger, defaults to the module name
-
+    Configure and return a logger for the given name.
+    
+    If the logger has no handlers, attach a StreamHandler that writes to stdout, set the logger level based on settings.DEBUG, and apply a formatter that includes timestamp, logger name, filename, line number, level, and message.
+    
+    Parameters:
+        name (Optional[str]): Logger name; defaults to the module's __name__ when omitted.
+    
     Returns:
-        Configured logger instance
+        logging.Logger: The configured logger instance. The function avoids adding duplicate handlers to an existing logger.
     """
     logger_name = name if name else __name__
     logger = logging.getLogger(logger_name)

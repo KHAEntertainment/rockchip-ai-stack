@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def ALLOWED_DOMAINS(self) -> List[str]:
+        """
+        Return a list of allowed host domains derived from the `DOMAINS` setting.
+        
+        Parses the comma-separated `DOMAINS` string, trims whitespace from each entry, and omits empty values.
+        
+        Returns:
+            List[str]: A list of non-empty, trimmed domain strings.
+        """
         return [h.strip() for h in self.DOMAINS.split(",") if h.strip()]
 
     class Config:

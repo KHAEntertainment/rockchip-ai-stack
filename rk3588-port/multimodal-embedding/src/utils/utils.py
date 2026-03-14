@@ -58,16 +58,13 @@ def should_bypass_proxy(url: str, no_proxy: str) -> bool:
 
 async def download_image(image_url: str) -> Image.Image:
     """
-    Downloads an image from a given URL with proxy support.
-
-    Args:
-        image_url: URL of the image to download.
-
+    Download an image from the given URL and return it as a NumPy array.
+    
     Returns:
-        Downloaded image as a numpy array.
-
+        A NumPy array containing the image data with shape (height, width, channels).
+    
     Raises:
-        RuntimeError: If there is an error during the download process.
+        RuntimeError: If the image cannot be downloaded or decoded.
     """
     try:
         logger.debug(f"Downloading image from URL: {image_url}")
@@ -95,16 +92,16 @@ async def download_image(image_url: str) -> Image.Image:
 
 def decode_base64_image(image_base64: str) -> Image.Image:
     """
-    Decodes a base64 encoded image string to PIL Image.
-
-    Args:
-        image_base64: Base64 encoded image string, optionally with data URL prefix.
-
+    Decode a base64-encoded image string and return it as a PIL Image.
+    
+    Parameters:
+        image_base64 (str): Base64-encoded image data; may include a data URL prefix (for example, "data:image/png;base64,...").
+    
     Returns:
-        Decoded PIL Image object.
-
+        PIL.Image.Image: Image object created from the decoded bytes.
+    
     Raises:
-        RuntimeError: If there is an error during the decoding process.
+        RuntimeError: If decoding fails (e.g., invalid base64 or malformed data) or an unexpected error occurs while opening the image.
     """
     try:
         logger.debug("Decoding base64 image")
@@ -124,13 +121,13 @@ def decode_base64_image(image_base64: str) -> Image.Image:
 
 def delete_file(file_path: str):
     """
-    Deletes a file from the filesystem with error handling.
-
-    Args:
-        file_path: Path of the file to delete.
-
+    Delete the file at the given path, ignoring if the file does not exist.
+    
+    Parameters:
+        file_path (str): Path of the file to remove.
+    
     Raises:
-        RuntimeError: If there is an error during deletion (FileNotFoundError is handled gracefully).
+        RuntimeError: If deletion fails for reasons other than the file being missing. The exception message includes ErrorMessages.DELETE_FILE_ERROR and the underlying error.
     """
     try:
         logger.debug(f"Deleting file: {file_path}")
@@ -145,16 +142,16 @@ def delete_file(file_path: str):
 
 async def download_video(video_url: str) -> str:
     """
-    Downloads a video from a given URL with proxy support.
-
-    Args:
-        video_url: URL of the video to download.
-
+    Download a video from the provided URL and save it to a uniquely named file in the system temporary directory.
+    
+    Parameters:
+        video_url (str): URL of the video to download.
+    
     Returns:
-        Path to the downloaded video file.
-
+        file_path (str): Path to the saved video file in the system temporary directory.
+    
     Raises:
-        RuntimeError: If there is an error during the download process.
+        RuntimeError: If the download fails or an unexpected error occurs while saving the file.
     """
     try:
         logger.debug(f"Downloading video from URL: {video_url}")
@@ -187,16 +184,16 @@ async def download_video(video_url: str) -> str:
 
 def decode_base64_video(video_base64: str) -> str:
     """
-    Decodes a base64 encoded video string and saves it to a temporary file.
-
-    Args:
-        video_base64: Base64 encoded video string, optionally with data URL prefix.
-
+    Decode a base64-encoded video (optionally a data URL) and write it to a uniquely named temporary file.
+    
+    Parameters:
+        video_base64 (str): Base64-encoded video data; may include a data URL prefix (e.g., "data:...;base64,").
+    
     Returns:
-        Path to the decoded video file.
-
+        str: Path to the created temporary video file.
+    
     Raises:
-        RuntimeError: If there is an error during the decoding process.
+        RuntimeError: If decoding or writing the file fails; the error message is prefixed with ErrorMessages.DECODE_BASE64_VIDEO_ERROR.
     """
     try:
         logger.debug("Decoding base64 video")

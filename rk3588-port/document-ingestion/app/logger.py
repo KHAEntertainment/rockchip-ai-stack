@@ -9,15 +9,13 @@ config = Settings()
 
 def add_service_name(_, __, event_dict):
     """
-    Adds the service name to every structured log event.
-
-    Args:
-        _ (Any): Unused (structlog logger instance).
-        __ (Any): Unused (method name).
-        event_dict (dict): The event dictionary being built.
-
+    Add the configured service name to a structlog event dictionary.
+    
+    Parameters:
+        event_dict (dict): The event dictionary being built by structlog.
+    
     Returns:
-        dict: Updated event dictionary with ``service_name`` key.
+        dict: The same event dictionary with a `service_name` key set to the application's display name.
     """
     event_dict["service_name"] = config.APP_DISPLAY_NAME
     return event_dict

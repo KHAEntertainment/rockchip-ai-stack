@@ -29,12 +29,29 @@ class LocalAudioStore:
     """
 
     def __init__(self, storage_path: str) -> None:
+        """
+        Initialize the LocalAudioStore with a filesystem root directory.
+        
+        Parameters:
+            storage_path (str): Path to use as the storage root; it will be resolved to an absolute path and created (including parent directories) if it does not already exist.
+        """
         self._root = Path(storage_path).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         logger.debug(f"LocalAudioStore initialised at: {self._root}")
 
     def _safe_path(self, filename: str) -> Path:
-        """Resolve *filename* relative to the storage root and verify containment."""
+        """
+        Resolve a filename within the storage root and ensure it does not escape that root.
+        
+        Parameters:
+            filename (str): A file name or relative path to resolve inside the storage root.
+        
+        Returns:
+            Path: The resolved absolute Path contained within the storage root.
+        
+        Raises:
+            ValueError: If resolving `filename` would produce a path outside the storage root.
+        """
         target = (self._root / filename).resolve()
         try:
             target.relative_to(self._root)
@@ -50,19 +67,14 @@ class LocalAudioStore:
 
     def save_file(self, filename: str, data: bytes) -> str:
         """
-        Persist *data* to *filename* inside the storage root.
-
-        Parameters
-        ----------
-        filename:
-            Relative filename (no path separators).
-        data:
-            Raw bytes to write.
-
-        Returns
-        -------
-        str
-            Absolute path to the saved file.
+        Persist the given bytes to a file located under the storage root.
+        
+        Parameters:
+            filename (str): Target filename resolved relative to the storage root. If resolution would escape the root, a ValueError is raised.
+            data (bytes): Raw bytes to write to the file.
+        
+        Returns:
+            str: Absolute path of the saved file.
         """
         target = self._safe_path(filename)
         try:
@@ -76,22 +88,17 @@ class LocalAudioStore:
 
     def get_file(self, filename: str) -> bytes:
         """
-        Read and return the raw bytes of *filename*.
-
-        Parameters
-        ----------
-        filename:
-            Relative filename inside the storage root.
-
-        Returns
-        -------
-        bytes
-            Contents of the file.
-
-        Raises
-        ------
-        FileNotFoundError
-            If the file does not exist in the storage root.
+        Retrieve the contents of the given file as bytes.
+        
+        Parameters:
+            filename (str): Relative filename inside the storage root.
+        
+        Returns:
+            bytes: File contents.
+        
+        Raises:
+            FileNotFoundError: If the resolved path does not exist or is not a file.
+            RuntimeError: If an error occurs while reading the file.
         """
         target = self._safe_path(filename)
         if not target.is_file():
@@ -132,12 +139,10 @@ class LocalAudioStore:
 
     def list_files(self) -> list[str]:
         """
-        Return a sorted list of filenames stored in the storage root.
-
-        Returns
-        -------
-        list[str]
-            Filenames (not full paths) of all files directly inside the root.
+        List filenames directly under the storage root in sorted order.
+        
+        Returns:
+            list[str]: Filenames (not full paths) of files located directly inside the storage root.
         """
         try:
             files = sorted(p.name for p in self._root.iterdir() if p.is_file())

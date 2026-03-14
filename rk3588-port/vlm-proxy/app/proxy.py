@@ -80,7 +80,15 @@ app = FastAPI(
 
 
 def _pil_to_base64_png(image) -> str:
-    """Encode a PIL image as a base64 PNG data-URI."""
+    """
+    Encode a PIL Image as a base64-encoded PNG data URL.
+    
+    Parameters:
+        image (PIL.Image.Image): Image to encode as a PNG.
+    
+    Returns:
+        data_url (str): A data URL of the form "data:image/png;base64,<base64-encoded-png>".
+    """
     buf = BytesIO()
     image.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
@@ -88,7 +96,12 @@ def _pil_to_base64_png(image) -> str:
 
 
 def _has_video_content(messages: List[ChatMessage]) -> bool:
-    """Return True if any message contains a video or video_url content part."""
+    """
+    Determine whether any chat message contains a video or video_url content part.
+    
+    Returns:
+        `true` if at least one message includes a `MessageContentVideo` or `MessageContentVideoUrl` part, `false` otherwise.
+    """
     for message in messages:
         if not isinstance(message.content, list):
             continue
@@ -102,19 +115,21 @@ async def _expand_video_part(
     part: MessageContentPart,
     max_frames: int,
 ) -> List[MessageContentPart]:
-    """Convert a single video content part into a list of image_url parts.
-
-    For ``MessageContentVideoUrl`` the video is first saved to /tmp via
-    ``decode_and_save_video`` when the URL is a base64 data-URI.  Then
-    ``extract_qwen_video_frames`` is called to sample frames.  Each frame
-    becomes an ``image_url`` content part carrying a base64 PNG data-URI.
-
-    For ``MessageContentVideo`` (a list of frame URLs / base64 images) the
-    frames are loaded directly.
-
+    """
+    Convert a single video content part into one or more image_url content parts.
+    
+    If the part is a video (either MessageContentVideoUrl or MessageContentVideo), samples up to `max_frames` frames and returns a list of MessageContentImageUrl parts where each part contains a base64-encoded PNG data-URI for a sampled frame. If the part is not a video type, returns a single-element list containing the original part unchanged.
+    
+    Parameters:
+        part (MessageContentPart): The content part to expand; may be a video URL part, an inlined video part, or other content.
+        max_frames (int): Maximum number of frames to sample from the video.
+    
     Returns:
-        A list of ``MessageContentImageUrl`` parts (one per sampled frame),
-        or the original part unchanged when it is not a video type.
+        List[MessageContentPart]: A list of MessageContentImageUrl parts (one per sampled frame) or the original part when it is not a video.
+    
+    Raises:
+        ValueError: If a MessageContentVideoUrl contains an unsupported URL scheme.
+        HTTPException: With status 422 if no frames could be produced from the provided video content.
     """
     if isinstance(part, MessageContentVideoUrl):
         url = part.video_url.get("url", "")
@@ -209,7 +224,16 @@ async def _rewrite_messages_for_video(
     messages: List[ChatMessage],
     max_frames: int,
 ) -> List[ChatMessage]:
-    """Return a copy of *messages* with video parts replaced by image_url parts."""
+    """
+    Create a copy of messages where any video content parts are replaced by sampled image_url parts.
+    
+    Parameters:
+        messages (List[ChatMessage]): Messages to inspect and rewrite.
+        max_frames (int): Maximum number of frames to sample for each video part.
+    
+    Returns:
+        List[ChatMessage]: A new list of ChatMessage objects with video parts replaced by image_url parts.
+    """
     rewritten: List[ChatMessage] = []
     for message in messages:
         if not isinstance(message.content, list):
@@ -229,13 +253,17 @@ def _build_forward_payload(
     raw_body: Dict[str, Any],
     rewritten_messages: Optional[List[ChatMessage]],
 ) -> Dict[str, Any]:
-    """Build the forwarding payload from the raw request body.
-
-    When *rewritten_messages* is None the raw body is forwarded as-is (no
-    video rewriting was needed), preserving every field the upstream client
-    sent.  When video frames were extracted, only the ``messages`` key is
-    replaced so that all other original fields (vendor extensions, sampling
-    params, etc.) are still forwarded unchanged.
+    """
+    Build the forwarding payload from the original request body.
+    
+    If `rewritten_messages` is None, return a shallow copy of `raw_body` to forward the request unchanged. If provided, replace the `"messages"` field with the serialized rewritten messages while preserving all other fields.
+    
+    Parameters:
+        raw_body (Dict[str, Any]): Original parsed request body.
+        rewritten_messages (Optional[List[ChatMessage]]): Rewritten messages to embed, or `None` to keep original messages.
+    
+    Returns:
+        Dict[str, Any]: Payload to forward to the upstream server.
     """
     if rewritten_messages is None:
         return dict(raw_body)
@@ -279,12 +307,20 @@ async def _stream_response(
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request, chat_request: ChatRequest):
-    """OpenAI-compatible chat completions endpoint.
-
-    - Requests without video content are forwarded to llama-server unchanged.
-    - Requests with video content have their video parts replaced with sampled
-      image_url parts before forwarding.
-    - SSE streaming is passed through transparently.
+    """
+    OpenAI-compatible chat completions endpoint that forwards requests to the configured llama-server.
+    
+    Examines the incoming request for video content and, if present, replaces video parts with sampled `image_url` parts before forwarding. Preserves Authorization and Content-Type headers from the client. If the request requests streaming (`stream` present), proxies SSE from the llama-server transparently; otherwise returns the llama-server JSON response.
+    
+    Parameters:
+        request (Request): Incoming FastAPI request (used for headers and raw body).
+        chat_request (ChatRequest): Parsed chat request payload containing `messages` to inspect and possibly rewrite.
+    
+    Returns:
+        StreamingResponse or JSONResponse: an SSE streaming response when `stream` is enabled, otherwise the llama-server JSON response forwarded with its status code.
+    
+    Raises:
+        HTTPException: forwarded when the llama-server returns an error status, or with status 503 if the llama-server is unreachable.
     """
     target_url = f"{settings.llama_server_url}/v1/chat/completions"
 
@@ -342,10 +378,11 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
 
 @app.get("/health")
 async def health():
-    """Health-check endpoint.
-
-    Probes llama-server's /health route.  Returns HTTP 200 when the upstream
-    is reachable or HTTP 503 with degraded status otherwise.
+    """
+    Report proxy and llama-server health.
+    
+    Returns:
+        JSONResponse: Body contains keys "status" ("ok" or "degraded"), "llama_server" ("reachable" or "unreachable"), and "proxy" ("vlm-proxy"); HTTP status is 200 when the upstream llama-server is reachable, 503 otherwise.
     """
     llama_health_url = f"{settings.llama_server_url}/health"
     try:

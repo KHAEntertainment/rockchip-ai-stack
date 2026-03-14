@@ -44,6 +44,15 @@ class CPUReranker:
         model_name_or_path: str,
         max_batch_size: int = 32,
     ) -> None:
+        """
+        Create a CPUReranker configured with a model path and maximum inference batch size.
+        
+        Parameters:
+            model_name_or_path: Path or identifier for the cross-encoder model to load.
+            max_batch_size: Maximum number of query–passage pairs processed in a single inference batch (default 32).
+        
+        The tokenizer and model are initialized to `None` and are loaded lazily when needed.
+        """
         self.model_name_or_path = model_name_or_path
         self.max_batch_size = max_batch_size
         self._tokenizer = None
@@ -54,7 +63,16 @@ class CPUReranker:
     # ------------------------------------------------------------------
 
     def load(self) -> None:
-        """Load tokeniser and model weights into memory (CPU)."""
+        """
+        Load the tokenizer and sequence-classification model onto CPU.
+        
+        Initializes the internal tokenizer and model from self.model_name_or_path with trust_remote_code=True
+        and sets the model to evaluation mode. This populates the instance attributes used by score().
+        Raises an ImportError with installation guidance if the required `transformers` (and `torch`) package(s) are not available.
+         
+        Raises:
+            ImportError: If `transformers` (or its torch dependency) cannot be imported.
+        """
         try:
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
         except ImportError as exc:
@@ -80,23 +98,17 @@ class CPUReranker:
     # ------------------------------------------------------------------
 
     def score(self, query: str, texts: List[str]) -> List[float]:
-        """Return sigmoid relevance scores for each (query, text) pair.
-
-        Pairs are processed in batches of ``max_batch_size`` to avoid OOM on
-        large candidate lists.  Scores are returned in the same order as the
-        input ``texts`` list.
-
-        Parameters
-        ----------
-        query:
-            The search query string.
-        texts:
-            Candidate passages to score against the query.
-
-        Returns
-        -------
-        list[float]
-            Relevance scores in ``[0, 1]``, one per text, in input order.
+        """
+        Compute sigmoid relevance scores for each text for a given query.
+        
+        Processes query–text pairs in batches of self.max_batch_size to limit memory usage and returns scores in the same order as the input texts.
+        
+        Parameters:
+            query (str): The search query string.
+            texts (List[str]): Candidate passages to score against the query.
+        
+        Returns:
+            List[float]: Relevance scores in [0, 1], one per text, in input order.
         """
         if self._model is None or self._tokenizer is None:
             self.load()
@@ -153,6 +165,12 @@ class NPUReranker:
     """
 
     def __init__(self, model_name_or_path: str) -> None:
+        """
+        Initialize an NPU-backed reranker using the provided model path.
+        
+        Parameters:
+            model_name_or_path (str): Local path or Hugging Face model identifier used to load the underlying RKLLM reranker; the implementation instantiates an internal RKLLMReranker configured to use the NPU.
+        """
         self.model_name_or_path = model_name_or_path
         # Import shared utility — never redefine RKLLMReranker here.
         from shared.rkllm_utils import RKLLMReranker  # noqa: PLC0415
@@ -164,13 +182,11 @@ class NPUReranker:
     # ------------------------------------------------------------------
 
     def load(self) -> None:
-        """Load model weights onto the NPU.
-
-        .. note::
-            TODO: RKLLM — load Qwen3-VL-Reranker-2B via RKLLM NPU.
-            This delegates to :meth:`RKLLMReranker.load_model`, which raises
-            ``NotImplementedError`` until the RKLLM SDK integration is
-            complete.
+        """
+        Load the reranker model onto the NPU.
+        
+        Raises:
+            NotImplementedError: If RKLLM NPU loading is not yet implemented.
         """
         # TODO: RKLLM — load Qwen3-VL-Reranker-2B via RKLLM NPU
         self._rkllm.load_model()  # This raises NotImplementedError
@@ -180,10 +196,18 @@ class NPUReranker:
     # ------------------------------------------------------------------
 
     def score(self, query: str, texts: List[str]) -> List[float]:
-        """Score (query, text) pairs on the NPU.
-
-        .. note::
-            TODO: RKLLM — run reranker inference on NPU.
+        """
+        Rerank a list of candidate texts for a query using the NPU-backed RKLLM reranker.
+        
+        Parameters:
+            query (str): The input query to score against.
+            texts (List[str]): Candidate passages to be scored; order is preserved.
+        
+        Returns:
+            List[float]: Scores for each text in the same order as `texts`, typically in the range [0, 1].
+        
+        Raises:
+            NotImplementedError: If the underlying RKLLM NPU inference path is not yet implemented.
         """
         # TODO: RKLLM — run reranker inference on NPU
         return self._rkllm.rerank(query, texts)

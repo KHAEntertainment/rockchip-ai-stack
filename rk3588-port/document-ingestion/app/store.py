@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, UploadFile
 from http import HTTPStatus
@@ -33,11 +33,31 @@ class LocalFileStore:
     """
 
     def __init__(self, storage_path: str) -> None:
+        """
+        Initialize the LocalFileStore with a filesystem root and ensure the directory exists.
+        
+        Parameters:
+            storage_path (str): Filesystem path to use as the storage root; it will be resolved to an absolute path and created if it does not already exist.
+        """
         self._root = Path(storage_path).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _safe_object_path(self, bucket: str, name: str) -> Path:
-        """Sanitise *name* and verify the resulting path is inside the bucket dir."""
+        """
+        Return a safe filesystem path for an object name within a bucket.
+        
+        Strips any directory components from `name`, ensures the sanitized name is non-empty, resolves the destination path, and verifies it does not escape the bucket directory.
+        
+        Parameters:
+        	bucket (str): Bucket directory name.
+        	name (str): Proposed object name; directory components will be removed.
+        
+        Returns:
+        	Path: Absolute Path to the object inside the bucket.
+        
+        Raises:
+        	ValueError: If the sanitized name is empty or if the resolved path would escape the bucket directory.
+        """
         safe_name = Path(name).name  # strip any parent components
         if not safe_name:
             raise ValueError(f"Invalid object name: {name!r}")
@@ -56,15 +76,26 @@ class LocalFileStore:
     # ------------------------------------------------------------------
 
     def put_object(self, bucket: str, name: str, data: bytes) -> None:
-        """Write *data* to ``<root>/<bucket>/<name>``, creating dirs as needed."""
+        """
+        Store the given bytes as an object at <root>/<bucket>/<name>, creating any parent directories required.
+        
+        Parameters:
+        	bucket (str): Name of the bucket (top-level directory) to store the object in.
+        	name (str): Object name (filename) within the bucket; directory components will be sanitized.
+        	data (bytes): Raw bytes to write to the destination file.
+        """
         dest = self._safe_object_path(bucket, name)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
         logger.info(f"LocalFileStore: stored {dest}")
 
     def get_object(self, bucket: str, name: str) -> bytes:
-        """Return the raw bytes of ``<root>/<bucket>/<name>``.
-
+        """
+        Retrieve raw bytes for an object stored in the specified bucket.
+        
+        Returns:
+            The object's bytes.
+        
         Raises:
             FileNotFoundError: if the object does not exist.
         """
@@ -74,8 +105,9 @@ class LocalFileStore:
         return path.read_bytes()
 
     def remove_object(self, bucket: str, name: str) -> None:
-        """Delete ``<root>/<bucket>/<name>``.
-
+        """
+        Delete the object stored at <root>/<bucket>/<name>.
+        
         Raises:
             FileNotFoundError: if the object does not exist.
         """
@@ -86,7 +118,12 @@ class LocalFileStore:
         logger.info(f"LocalFileStore: removed {path}")
 
     def list_objects(self, bucket: str) -> List[str]:
-        """Return a list of object names (relative to the bucket root)."""
+        """
+        List object names stored in the given bucket.
+        
+        Returns:
+            list[str]: Object names relative to the bucket root; an empty list if the bucket does not exist.
+        """
         bucket_dir = self._root / bucket
         if not bucket_dir.exists():
             return []
@@ -98,16 +135,29 @@ class LocalFileStore:
     # ------------------------------------------------------------------
 
     def bucket_exists(self, bucket_name: str) -> bool:
-        """Return True if the bucket directory exists and is non-empty."""
+        """
+        Check whether the bucket directory exists.
+        
+        Returns:
+            `true` if the bucket directory exists, `false` otherwise.
+        """
         bucket_dir = self._root / bucket_name
         return bucket_dir.is_dir()
 
-    def get_document_size(self, bucket: str = config.DEFAULT_BUCKET, file_name: str = None) -> int:
-        """Return the size in bytes of *file_name* in *bucket*.
-
+    def get_document_size(self, bucket: str = config.DEFAULT_BUCKET, file_name: Optional[str] = None) -> int:
+        """
+        Get the size in bytes of the specified object in the given bucket.
+        
+        Parameters:
+            bucket (str): Bucket name; defaults to the module default bucket.
+            file_name (str): Name of the object within the bucket.
+        
+        Returns:
+            int: Size of the object in bytes.
+        
         Raises:
-            HTTPException 404: bucket not found or bucket empty.
-            FileNotFoundError: file not found.
+            HTTPException: 404 if the bucket does not exist or the bucket contains no files.
+            FileNotFoundError: If the specified object does not exist.
         """
         if not self.bucket_exists(bucket):
             raise HTTPException(
@@ -126,7 +176,12 @@ class LocalFileStore:
         return path.stat().st_size
 
     def get_document(self, bucket: str = config.DEFAULT_BUCKET) -> List[str]:
-        """Return all object names in *bucket*, creating the bucket dir if absent."""
+        """
+        List object names in the specified bucket, creating the bucket directory if it does not exist.
+        
+        Returns:
+        	a list of object names (relative to the bucket root)
+        """
         if not self.bucket_exists(bucket):
             (self._root / bucket).mkdir(parents=True, exist_ok=True)
         return self.list_objects(bucket)
@@ -135,12 +190,18 @@ class LocalFileStore:
         self,
         file_object: UploadFile,
         bucket: str = config.DEFAULT_BUCKET,
-        object_name: str = None,
+        object_name: Optional[str] = None,
     ) -> dict:
-        """Persist an uploaded file into local storage.
-
+        """
+        Store an uploaded file into the specified bucket and return its storage location.
+        
+        Parameters:
+            file_object (UploadFile): The uploaded file to persist; its filename is used when no `object_name` is provided.
+            bucket (str): Destination bucket name. Defaults to the module's default bucket.
+            object_name (str): Optional destination filename. When omitted, a unique filename is generated.
+        
         Returns:
-            dict: ``{"bucket": bucket, "file": object_name}``
+            dict: A mapping with keys `"bucket"` and `"file"` indicating the bucket used and the final stored filename.
         """
         file_name = file_object.filename
         if object_name is None:
@@ -158,7 +219,7 @@ class LocalFileStore:
     def delete_document(
         self,
         bucket: str = config.DEFAULT_BUCKET,
-        file_name: str = None,
+        file_name: Optional[str] = None,
         delete_all: bool = False,
     ) -> None:
         """Delete one or all files in *bucket*.
@@ -196,13 +257,14 @@ class LocalFileStore:
     async def download_document(
         self,
         bucket: str = config.DEFAULT_BUCKET,
-        file_name: str = None,
+        file_name: Optional[str] = None,
     ):
-        """Return an in-memory byte-stream for *file_name* in *bucket*.
-
+        """
+        Provide a seekable in-memory byte stream for the specified object.
+        
         Returns:
-            io.BytesIO: seekable byte stream (compatible with StreamingResponse).
-
+            io.BytesIO: seekable byte stream of the object's data.
+        
         Raises:
             HTTPException 404: bucket not found.
             FileNotFoundError: file not found.
@@ -219,9 +281,17 @@ class LocalFileStore:
 
     @staticmethod
     def get_destination_file(file_name: str) -> str:
-        """Build a unique storage name: ``<prefix>_<stem>_<uuid><ext>``.
-
-        Keeps the same naming convention as the original MinIO DataStore.
+        """
+        Constructs a unique storage filename from an input filename.
+        
+        Strips any directory components, replaces spaces with hyphens, preserves the original file extension,
+        and appends a short UUID with a 'doc' prefix to form the destination name.
+        
+        Parameters:
+            file_name (str): Source filename or path.
+        
+        Returns:
+            str: Destination filename in the format "doc_<stem>_<uuid><ext>".
         """
         suffix = str(shortuuid.uuid())
         prefix = "doc"

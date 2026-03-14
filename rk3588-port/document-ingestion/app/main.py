@@ -67,7 +67,12 @@ app.add_middleware(
     summary="Check the health of the API service",
 )
 async def check_health():
-    """Return a simple liveness status."""
+    """
+    Report service liveness.
+    
+    Returns:
+        dict: A mapping with key "status" set to "ok" indicating the service is alive.
+    """
     return {"status": "ok"}
 
 
@@ -82,7 +87,15 @@ async def check_health():
     response_model=List[dict],
 )
 async def get_documents() -> List[dict]:
-    """Retrieve a list of all distinct ingested document filenames."""
+    """
+    Retrieve the distinct ingested document embeddings.
+    
+    Returns:
+        A list of dictionaries, each representing a document embedding and its metadata (e.g., filename and embedding data).
+    
+    Raises:
+        HTTPException: 404 if no embeddings exist; 500 for other internal server errors.
+    """
     try:
         if not check_tables_exist():
             raise HTTPException(
@@ -114,7 +127,18 @@ async def ingest_document(
         File(description="Select single or multiple PDF, DOCX or TXT file(s)."),
     ],
 ) -> dict:
-    """Ingest one or more documents: store them locally and embed into LanceDB."""
+    """
+    Ingest one or more uploaded document files by storing them locally and creating embeddings in LanceDB.
+    
+    Parameters:
+        files (list[UploadFile]): One or more uploaded files (PDF, DOCX, or TXT). Each file will be persisted to the local DataStore and then ingested into LanceDB.
+    
+    Returns:
+        dict: A summary object with keys `status` (HTTP status code) and `message` describing the result, e.g. {"status": 200, "message": "Data preparation succeeded"}.
+    
+    Raises:
+        HTTPException: Raised with 400 for unsupported file formats, 500 for storage or ingestion failures, or other appropriate HTTP status codes for error conditions.
+    """
     try:
         if files:
             if not isinstance(files, list):
@@ -201,7 +225,19 @@ async def delete_documents(
     ] = None,
     delete_all: bool = False,
 ) -> None:
-    """Delete one or all document embeddings plus their stored files."""
+    """
+    Remove document embeddings from the vector store and delete the corresponding stored file(s).
+    
+    Parameters:
+        bucket_name (str): Name of the storage bucket to operate on.
+        file_name (Optional[str]): Specific file to delete; if omitted, deletion is controlled by `delete_all`.
+        delete_all (bool): If True, delete embeddings and files for all documents in the bucket; otherwise operate on `file_name`.
+    
+    Raises:
+        HTTPException: 404 if no embeddings exist or a specified file is not found;
+                       422 for invalid input (ValueError);
+                       500 for failures deleting embeddings or other internal errors.
+    """
     try:
         if not check_tables_exist():
             raise HTTPException(
@@ -252,14 +288,31 @@ async def download_documents(
         str, BeforeValidator(Validation.sanitize_input), Query(min_length=3)
     ] = config.DEFAULT_BUCKET,
 ):
-    """Return a stored document as a streaming download."""
+    """
+    Provide a stored document as a streaming download response.
+    
+    Returns:
+        StreamingResponse: a response streaming the file bytes with
+        Content-Length and Content-Disposition (attachment; filename=<file_name>) headers.
+    
+    Raises:
+        HTTPException: with status 404 if the document is not found.
+        HTTPException: with status 500 on internal server errors.
+    """
     try:
         file_size = DataStore.get_document_size(bucket_name, file_name)
         file_stream = await DataStore.download_document(bucket_name, file_name)
 
+        # Quote the filename and add RFC 5987 percent-encoded filename* for Unicode/special chars
+        import urllib.parse
+        quoted_name = file_name.replace("\\", "\\\\").replace('"', '\\"')
+        encoded_name = urllib.parse.quote(file_name, safe="")
         headers = {
             "Content-Length": f"{file_size}",
-            "Content-Disposition": f"attachment; filename={file_name}",
+            "Content-Disposition": (
+                f'attachment; filename="{quoted_name}"; '
+                f"filename*=UTF-8''{encoded_name}"
+            ),
         }
         return StreamingResponse(
             file_stream,
@@ -290,7 +343,12 @@ async def download_documents(
     response_model=List[str],
 )
 async def get_urls() -> List[str]:
-    """Return all distinct ingested URLs."""
+    """
+    Get all distinct ingested URLs.
+    
+    Returns:
+        list[str]: A list of distinct URLs that have been ingested.
+    """
     try:
         if not check_tables_exist():
             raise HTTPException(
@@ -317,7 +375,20 @@ async def get_urls() -> List[str]:
     response_model=dict,
 )
 async def ingest_links(urls: list[str]) -> dict:
-    """Fetch, parse and embed one or more URLs into LanceDB."""
+    """
+    Ingests a list of URLs into LanceDB and returns a summary of the ingestion results.
+    
+    Parameters:
+        urls (list[str]): List of URL strings to ingest; must contain at least one URL.
+    
+    Returns:
+        dict: A dictionary containing:
+            - "status": HTTP status code (200 on success).
+            - "message": Summary string like "<successful>/<total> URLs succeeded".
+    
+    Raises:
+        HTTPException: If `urls` is empty (400) or an internal error occurs during ingestion (500).
+    """
     try:
         if not urls:
             raise HTTPException(
@@ -354,7 +425,18 @@ async def delete_urls(
     url: Optional[str] = None,
     delete_all: Optional[bool] = False,
 ) -> None:
-    """Delete one URL or all URL embeddings."""
+    """
+    Remove embeddings for a specific URL or for all ingested URLs.
+    
+    Parameters:
+        url (Optional[str]): The URL whose embeddings should be deleted. If omitted and `delete_all` is False, no specific URL is targeted.
+        delete_all (Optional[bool]): If True, delete embeddings for all ingested URLs.
+    
+    Raises:
+        HTTPException: 404 if no embeddings exist.
+        HTTPException: 422 if input validation fails.
+        HTTPException: 500 if deletion from the vector database fails or an internal error occurs.
+    """
     try:
         if not check_tables_exist():
             raise HTTPException(

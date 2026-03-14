@@ -37,21 +37,20 @@ class ModelFactory:
         rknn_path: str = None,
     ) -> BaseEmbeddingModel:
         """
-        Create a model handler for the specified model.
-
-        Args:
-            model_id:   Model identifier (e.g. "QwenText/qwen3-vl-embedding-2b"
-                        or just "qwen3-vl-embedding-2b").
-            device:     Target device string.  If None, uses config default.
-            use_npu:    Whether to use RKLLM/RKNN NPU.  If None, reads USE_NPU env.
-            onnx_path:  Path to CLIP vision .onnx file (CPU fallback).
-            rknn_path:  Path to CLIP vision .rknn file (NPU).
-
+        Create a model handler configured for the given model identifier.
+        
+        Parameters:
+            model_id (str): Model identifier, either full (e.g. "QwenText/qwen3-vl-embedding-2b") or short ("qwen3-vl-embedding-2b").
+            device (str | None): Target device string; if None, the model configuration's default device is used.
+            use_npu (bool | None): Whether to enable RKLLM/RKNN NPU support; if None, the environment/config default is used.
+            onnx_path (str | None): Path to a CLIP vision `.onnx` file to use as a CPU fallback.
+            rknn_path (str | None): Path to a CLIP vision `.rknn` file to use on NPU.
+        
         Returns:
-            Configured model handler instance ready for load_model() and inference.
-
+            BaseEmbeddingModel: An instantiated and configured model handler ready for loading and inference.
+        
         Raises:
-            ValueError: If model_id is invalid or handler class is not found.
+            ValueError: If the model identifier is invalid or the handler class named by the model config is not registered.
         """
         try:
             config = get_model_config(
@@ -84,12 +83,25 @@ class ModelFactory:
 
     @staticmethod
     def list_models() -> Dict[str, list]:
-        """List all available models grouped by model type."""
+        """
+        Return all available models grouped by model type.
+        
+        Returns:
+            dict: Mapping from model type (str) to a list of available model identifiers (list of str).
+        """
         return list_available_models()
 
     @staticmethod
     def is_model_supported(model_id: str) -> bool:
-        """Return True if model_id is recognised by the factory."""
+        """
+        Check whether a configuration exists for the given model identifier.
+        
+        Parameters:
+            model_id (str): Model identifier to verify support for.
+        
+        Returns:
+            `true` if a configuration exists for the given model identifier, `false` otherwise.
+        """
         try:
             get_model_config(model_id)
             return True
@@ -105,17 +117,17 @@ def get_model_handler(
     rknn_path: str = None,
 ) -> BaseEmbeddingModel:
     """
-    Convenience function to get a configured model handler.
-
-    Args:
-        model_id:   Model identifier.
-        device:     Target device string.
-        use_npu:    Whether to use RKLLM/RKNN NPU.
-        onnx_path:  Path to CLIP vision .onnx file.
-        rknn_path:  Path to CLIP vision .rknn file.
-
+    Return a configured embedding model handler for the given model identifier.
+    
+    Parameters:
+        model_id (str): Identifier of the model to instantiate.
+        device (str, optional): Target device (e.g., CPU, GPU) to configure the model for.
+        use_npu (bool, optional): Whether to enable RKLLM/RKNN NPU acceleration.
+        onnx_path (str, optional): Filesystem path to a CLIP vision ONNX file to override the default.
+        rknn_path (str, optional): Filesystem path to a CLIP vision RKNN file to override the default.
+    
     Returns:
-        Configured model handler instance.
+        BaseEmbeddingModel: An instance of the configured model handler for the specified model.
     """
     return ModelFactory.create_model(
         model_id,
@@ -141,5 +153,13 @@ def register_model_handler(
 
 
 def create_model_handler(model_id: str) -> BaseEmbeddingModel:
-    """Backward-compatibility alias for get_model_handler()."""
+    """
+    Create and return a model handler configured for the given model identifier.
+    
+    Parameters:
+        model_id (str): Identifier of the model to instantiate; must match an available model.
+    
+    Returns:
+        BaseEmbeddingModel: An instance of the model handler configured for the specified model.
+    """
     return get_model_handler(model_id)

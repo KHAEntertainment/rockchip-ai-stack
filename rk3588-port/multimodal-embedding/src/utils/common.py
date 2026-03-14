@@ -98,6 +98,15 @@ class Settings(BaseSettings):
     @field_validator("USE_NPU", mode="before")
     @classmethod
     def validate_use_npu(cls, v):
+        """
+        Coerces various input forms into a boolean indicating whether the NPU should be enabled.
+        
+        Parameters:
+            v: The raw configuration value (may be a string, boolean, numeric, empty string, or None).
+        
+        Returns:
+            True if `v` represents an enabled value — case-insensitive strings "true", "1", "yes", or "on", or any truthy non-string value; False otherwise.
+        """
         if v == "" or v is None:
             return False
         if isinstance(v, str):
@@ -107,6 +116,15 @@ class Settings(BaseSettings):
     @field_validator("DEFAULT_START_OFFSET_SEC", mode="before")
     @classmethod
     def validate_default_start_offset_sec(cls, v):
+        """
+        Coerces the provided start-offset value to an integer suitable for DEFAULT_START_OFFSET_SEC.
+        
+        Parameters:
+            v (str | int | None): The raw input value from environment or config; may be an empty string, None, or a numeric value.
+        
+        Returns:
+            int: The start offset in seconds; returns 0 if `v` is an empty string or None, otherwise `int(v)`.
+        """
         if v == "" or v is None:
             return 0
         return int(v)
@@ -114,6 +132,15 @@ class Settings(BaseSettings):
     @field_validator("DEFAULT_NUM_FRAMES", mode="before")
     @classmethod
     def validate_default_num_frames(cls, v):
+        """
+        Coerces the input for DEFAULT_NUM_FRAMES to an integer, defaulting to 64 when empty or missing.
+        
+        Parameters:
+        	v (str | int | None): The raw value provided for DEFAULT_NUM_FRAMES; may be an empty string, None, or a numeric value.
+        
+        Returns:
+        	int: The validated number of frames (64 if input is "" or None, otherwise int(v)).
+        """
         if v == "" or v is None:
             return 64
         return int(v)
@@ -121,6 +148,19 @@ class Settings(BaseSettings):
     @field_validator("http_proxy", "https_proxy", mode="before")
     @classmethod
     def validate_proxy_url(cls, v):
+        """
+        Validate that a proxy URL is empty or begins with 'http://' or 'https://'.
+        
+        Parameters:
+            cls: The validator's class (unused).
+            v (str | None): The proxy URL to validate; may be an empty string or None.
+        
+        Returns:
+            The original `v` value if it is None, empty, or a valid http(s) URL.
+        
+        Raises:
+            ValueError: If `v` is non-empty and does not start with 'http://' or 'https://'.
+        """
         if v and v != "" and not v.startswith(("http://", "https://")):
             raise ValueError(f"Invalid proxy URL: {v}")
         return v

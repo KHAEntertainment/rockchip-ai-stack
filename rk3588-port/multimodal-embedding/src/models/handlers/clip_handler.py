@@ -69,6 +69,22 @@ class CLIPHandler(BaseEmbeddingModel):
     """
 
     def __init__(self, model_config: Dict[str, Any]):
+        """
+        Initialize the CLIPHandler using the provided configuration and prepare internal encoder placeholders.
+        
+        Parameters:
+            model_config (Dict[str, Any]): Configuration dictionary with keys:
+                - model_name (str): open_clip model architecture name (e.g., "ViT-B-32").
+                - pretrained (str): open_clip checkpoint tag to load.
+                - use_npu (bool, optional): If True, use RKNN/NPU execution for the vision encoder. Defaults to False.
+                - onnx_path (str | None, optional): Path to the vision encoder ONNX file (CPU path).
+                - rknn_path (str | None, optional): Path to the compiled RKNN file (NPU path).
+                - npu_core (str, optional): RKNN core identifier to use when running on NPU. Defaults to "NPU_CORE_0".
+        
+        Notes:
+            - The vision encoder is managed via an RKNNModel wrapper configured from the provided paths and `use_npu` flag.
+            - The text encoder (tokenizer and preprocess transforms) is expected to be loaded on CPU via open_clip during load_model().
+        """
         super().__init__(model_config)
         self.model_name: str = model_config["model_name"]
         self.pretrained: str = model_config["pretrained"]
@@ -97,15 +113,10 @@ class CLIPHandler(BaseEmbeddingModel):
     # ------------------------------------------------------------------
 
     def load_model(self) -> None:
-        """Load the CLIP model components.
-
-        Vision encoder:
-          - use_npu=False: loads the .onnx file via ONNX Runtime.
-          - use_npu=True:  TODO — loads the .rknn file via RKNNLite (stub).
-
-        Text encoder:
-          - Always loaded via open_clip on CPU.
-          - When use_npu=True the text path still runs on CPU.
+        """
+        Load the CLIP vision and text encoders and their preprocessors.
+        
+        Initializes the configured vision encoder via self._vision_model (ONNX CPU path or RKNN NPU path if enabled) and loads the OpenCLIP text encoder, tokenizer, and inference preprocess. When NPU mode is enabled the vision NPU path may be a stub or not yet implemented; the text encoder always runs on CPU.
         """
         self._embedding_dim = None
         logger.info(
@@ -215,7 +226,15 @@ class CLIPHandler(BaseEmbeddingModel):
         return image_features
 
     def convert_to_openvino(self, ov_models_dir: str) -> tuple:
-        """Not applicable for this port — returns empty tuple."""
+        """
+        Indicates that OpenVINO conversion is unsupported for this port.
+        
+        Parameters:
+            ov_models_dir (str): Target directory for converted OpenVINO models; parameter is ignored.
+        
+        Returns:
+            tuple: An empty tuple.
+        """
         logger.warning(
             "convert_to_openvino() called on CLIPHandler; "
             "OpenVINO is not supported in the RK3588 port."
@@ -223,7 +242,12 @@ class CLIPHandler(BaseEmbeddingModel):
         return ()
 
     def get_embedding_dim(self) -> int:
-        """Return the output embedding dimension (always 2048 after padding)."""
+        """
+        Get the fixed output embedding dimension used by the handler.
+        
+        Returns:
+            embedding_dim (int): The target embedding dimension, 2048.
+        """
         return EMBEDDING_DIM
 
     # ------------------------------------------------------------------
@@ -231,19 +255,16 @@ class CLIPHandler(BaseEmbeddingModel):
     # ------------------------------------------------------------------
 
     def _pad_to_embedding_dim(self, features: torch.Tensor) -> torch.Tensor:
-        """Zero-pad or slice feature vectors to EMBEDDING_DIM (2048).
-
-        CLIP models output 512 (ViT-B) / 768 or 1024 (ViT-L, ViT-H) dims.
-        These are smaller than the required 2048.  Zero-padding preserves the
-        encoded direction while satisfying the shared schema contract.
-
-        If a future model outputs more than 2048 dims the tensor is sliced.
-
-        Args:
-            features: Tensor of shape (B, D).
-
+        """
+        Pad or truncate feature vectors so their last dimension equals EMBEDDING_DIM (2048).
+        
+        Pads with zeros on the right when the feature dimensionality is less than EMBEDDING_DIM; if the dimensionality is greater than EMBEDDING_DIM, truncates the extra dimensions (and logs a warning).
+        
+        Parameters:
+            features (torch.Tensor): Input tensor of shape (B, D).
+        
         Returns:
-            Tensor of shape (B, 2048).
+            torch.Tensor: Tensor of shape (B, 2048) with the same dtype and device as `features`.
         """
         D = features.shape[-1]
         if D == EMBEDDING_DIM:
@@ -263,7 +284,12 @@ class CLIPHandler(BaseEmbeddingModel):
         return features[:, :EMBEDDING_DIM]
 
     def _get_preprocess_image_size(self) -> int:
-        """Infer the expected input resolution from the preprocess pipeline."""
+        """
+        Infer the expected input image size from the preprocess transform pipeline.
+        
+        Returns:
+            int: Inferred image size (uses the first element if a tuple/list); returns 224 if the preprocess or a size attribute is unavailable.
+        """
         default_size = 224
         if self.preprocess is None:
             return default_size

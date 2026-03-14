@@ -46,10 +46,27 @@ config = Settings()
 # ---------------------------------------------------------------------------
 
 def parse_paragraph(document: Document, para: Paragraph) -> str:
+    """
+    Extract the plain text content of a DOCX paragraph.
+    
+    Returns:
+        str: The paragraph's text content.
+    """
     return para.text
 
 
 def parse_table(table: Table) -> str:
+    """
+    Convert a python-docx Table into a pipe-delimited string where each row is a separate line.
+    
+    Each row is rendered as a line with cell texts joined by `|` and surrounded by leading and trailing `|`.
+    
+    Parameters:
+        table (Table): A python-docx Table object to convert.
+    
+    Returns:
+        str: Multi-line string representation of the table; each line corresponds to a row with cells separated and bordered by `|`.
+    """
     table_extracted = []
     for row in table.rows:
         row_data = [cell.text for cell in row.cells]
@@ -96,15 +113,14 @@ async def save_temp_file(file: UploadFile, bucket_name: str, filename: str) -> P
 # ---------------------------------------------------------------------------
 
 async def get_documents_embeddings() -> list:
-    """Return distinct ingested documents from LanceDB.
-
-    Replaces the original SQL JOIN on ``langchain_pg_embedding`` /
-    ``langchain_pg_collection``.  Reads the LanceDB table and returns one
-    entry per unique ``source_path`` with the file name and bucket decoded
-    from the stored JSON metadata.
-
+    """
+    List unique ingested documents stored in LanceDB.
+    
     Returns:
-        list[dict]: Each entry has ``file_name`` and ``bucket_name`` keys.
+        list[dict]: Each dict has keys `file_name` (str) and `bucket_name` (str).
+    
+    Raises:
+        HTTPException: If documents cannot be retrieved from LanceDB.
     """
     try:
         db = lancedb.connect(config.LANCEDB_PATH)
@@ -152,18 +168,17 @@ async def get_documents_embeddings() -> list:
 # ---------------------------------------------------------------------------
 
 def ingest_to_lancedb(doc_path: Path, bucket: str) -> None:
-    """Parse *doc_path*, chunk the text, embed and store chunks in LanceDB.
-
-    Renamed from ``ingest_to_pgvector()``.  All parsing/chunking logic is
-    identical to the original.  The vector-store back-end is now LanceDB
-    via ``shared/lancedb_schema.py``.
-
-    Args:
-        doc_path (Path): Local file to ingest.
-        bucket (str): Logical bucket name stored in chunk metadata.
-
+    """
+    Ingests a local document by parsing its text, splitting into chunks, embedding those chunks, and storing them in LanceDB.
+    
+    Supports PDF (page-aware), DOCX, and TXT input files; each stored chunk is saved with metadata including bucket and filename.
+    
+    Parameters:
+        doc_path (Path): Path to the local file to ingest.
+        bucket (str): Logical bucket name attached to each chunk's metadata.
+    
     Raises:
-        HTTPException: On empty document, parsing failure, or embedding error.
+        HTTPException: If the document contains no text, parsing fails, embedding/storage fails, or other ingestion errors occur.
     """
     try:
         chunks: list[Document] = []
@@ -327,22 +342,22 @@ async def delete_embeddings(
     file_name: Optional[str],
     delete_all: bool = False,
 ) -> bool:
-    """Delete embeddings from LanceDB for a bucket or a specific file.
-
-    Replaces the original raw-SQL DELETE queries against
-    ``langchain_pg_embedding``.
-
-    Args:
-        bucket_name (str): Logical bucket name stored in chunk metadata.
-        file_name (Optional[str]): File to delete; required if *delete_all* is False.
-        delete_all (bool): Delete every embedding whose metadata has this bucket.
-
+    """
+    Delete embeddings from LanceDB for a bucket or a specific file.
+    
+    Deletes rows in the configured LanceDB collection that match the provided bucket (and file when specified). If delete_all is True, removes all rows with the given bucket; otherwise requires file_name and removes rows matching both bucket and doc_filename. The function returns True when the deletion operation completes (it may be True even if zero rows were removed).
+    
+    Parameters:
+        bucket_name (str): Logical bucket name stored in each row's top-level `bucket` column.
+        file_name (Optional[str]): Document filename to delete (required when `delete_all` is False).
+        delete_all (bool): If True, delete all rows with `bucket` == bucket_name; otherwise delete only rows matching both bucket and file_name.
+    
     Returns:
-        bool: True if at least one row was deleted or the operation completed.
-
+        bool: `True` if the deletion operation completed successfully.
+    
     Raises:
-        ValueError: If *delete_all* is False and *file_name* is not provided.
-        HTTPException: On any LanceDB error.
+        ValueError: If `delete_all` is False and `file_name` is not provided.
+        HTTPException: If an unexpected error occurs while interacting with LanceDB.
     """
     try:
         db = lancedb.connect(config.LANCEDB_PATH)

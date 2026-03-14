@@ -16,10 +16,20 @@
 | **vlm-proxy** | `rk3588-port/vlm-proxy/` | 8082 | Thin proxy: extracts video frames → forwards to llama-server. **Skip if no video input needed.** | `cd rk3588-port/vlm-proxy && uvicorn app.proxy:app --host 0.0.0.0 --port 8082` |
 | **chat-qa** | `rk3588-port/chat-qa/` | 8080 | RAG chatbot: LanceDB retrieval → rerank → LLM via streaming SSE. | `cd rk3588-port/chat-qa && uvicorn app.server:app --host 0.0.0.0 --port 8080` |
 | **audio-analyzer** | `rk3588-port/audio-analyzer/` | 8002 | Audio/video transcription via pywhispercpp (whisper.cpp, CPU). | `cd rk3588-port/audio-analyzer && uvicorn audio_analyzer.main:app --host 0.0.0.0 --port 8002` |
+| **model-download** | `rk3588-port/model-download/` | 8084 | REST API for downloading HuggingFace / Ollama models. OpenVINO plugin disabled on ARM64; HF and Ollama plugins work natively. | `cd rk3588-port/model-download && ENABLED_PLUGINS=huggingface,ollama uvicorn src.main:app --host 0.0.0.0 --port 8084` |
+| **multilevel-video-understanding** | `rk3588-port/multilevel-video-understanding/` | 8085 | Video summarisation using multi-level VLM prompting. Requires an OpenAI-compatible LLM endpoint. | `cd rk3588-port/multilevel-video-understanding && VLM_ENDPOINT_URL=http://localhost:8082/v1 uvicorn video_analyzer.main:app --host 0.0.0.0 --port 8085` |
 
 > **vlm-proxy vs llama-server:** If your chat clients never send video URLs, point
 > `LLM_ENDPOINT_URL` directly at llama-server (`http://localhost:8080/v1`). The proxy
 > adds zero value for text/image-only requests.
+
+> **model-download — OpenVINO plugin:** On ARM64/aarch64 the `openvino` plugin is
+> automatically skipped (its import fails silently). Set `ENABLED_PLUGINS=huggingface,ollama`
+> explicitly to avoid the startup warning.
+
+> **video-chunking-utils:** This is a library, not a standalone service. Install it
+> with `pip install -e rk3588-port/video-chunking-utils/` and import
+> `from video_chunking import UniformChunk, PeltChunk`.
 
 ---
 
@@ -38,7 +48,9 @@ Services must be started in this order. Each row depends on all rows above it.
         ↓ LLM_ENDPOINT_URL
 5. chat-qa                (port 8080 by default — change if llama-server is on 8080)
 
-   audio-analyzer         (port 8002)  ← independent, start anytime
+   audio-analyzer                    (port 8002)  ← independent, start anytime
+   model-download                    (port 8084)  ← independent, start anytime
+   multilevel-video-understanding    (port 8085)  ← needs llama-server or vlm-proxy running
 ```
 
 **Important:** chat-qa must not start until LanceDB has been populated by at least
