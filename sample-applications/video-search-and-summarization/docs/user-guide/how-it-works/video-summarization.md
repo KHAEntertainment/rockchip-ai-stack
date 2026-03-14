@@ -119,15 +119,15 @@ The key components of the Video Summarization mode are as follows:
 
    **Inference microservices**:
 
-   - [Multimodal Embedding](../../../../../microservices/multimodal-embedding-serving/)
+   - [Multimodal Embedding](../../../../../services/multimodal-embedding/)
 
-   - [Audio Analyzer](../../../../../microservices/audio-analyzer/)
+   - [Audio Analyzer](../../../../../services/audio-analyzer/)
 
-   - [VLM microservice](../../../../../microservices/vlm-openvino-serving/)
+   - [VLM microservice](../../../../../services/vlm-openvino-serving/)
 
     **Data-handling microservices**
 
-   - [VDMS-based data preparation](../../../../../microservices/visual-data-preparation-for-retrieval/vdms/)
+   - [VDMS-based data preparation](../../../../../services/visual-data-preparation-for-retrieval/)
 
    See the respective documentation for details.
 

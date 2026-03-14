@@ -16,7 +16,7 @@ on:
     branches:
       - main
     paths:
-      - 'microservices/multimodal-embedding-serving/**'
+      - 'services/multimodal-embedding/**'
 
 jobs:
    
@@ -31,7 +31,7 @@ jobs:
       
       - name: Build Docker image
         run: |
-          cd microservices/multimodal-embedding-serving/
+          cd services/multimodal-embedding/
           
           
           # Build multimodal embedding serving microservice (Poetry-based FastAPI)
@@ -51,7 +51,7 @@ jobs:
           scan-scope: "all"  
           severity: "HIGH,CRITICAL" 
           format: "json"
-          scan_target: "microservices/multimodal-embedding-serving/"
+          scan_target: "services/multimodal-embedding/"
           report_suffix: "-fs-multimodal-embedding-serving-CT7"
       
          
@@ -84,7 +84,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/multimodal-embedding-serving/docker/"
+          scan_target: "services/multimodal-embedding/docker/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -110,7 +110,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/multimodal-embedding-serving/"
+          paths: "services/multimodal-embedding/"
           report_suffix: "-bandit-multimodal-embedding-serving-CT161"
           
       - name: Upload Report
@@ -134,7 +134,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/multimodal-embedding-serving/"
+          paths: "services/multimodal-embedding/"
           exclude_dirs: ".git,.pytest_cache,__pycache__,.venv"
           
       - name: Upload Report
@@ -172,7 +172,7 @@ jobs:
           
       - name: Scan for secrets
         run: |
-          gitleaks dir "microservices/multimodal-embedding-serving/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-multimodal-embedding-serving.json -r gitleaks-multimodal-embedding-serving.json || true
+          gitleaks dir "services/multimodal-embedding/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-multimodal-embedding-serving.json -r gitleaks-multimodal-embedding-serving.json || true
           
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
@@ -199,13 +199,13 @@ jobs:
           
       - name: Install dependencies and pylint
         run: |
-          cd microservices/multimodal-embedding-serving/
+          cd services/multimodal-embedding/
           poetry install || true
           poetry add --group dev pylint || true
       
       - name: Run pylint
         run: |
-          cd microservices/multimodal-embedding-serving/
+          cd services/multimodal-embedding/
           mkdir -p security-results
           echo "=== Pylint Scan Results - Multimodal Embedding Serving ===" > security-results/pylint-report-multimodal-embedding-serving.txt
           echo "Scan Date: $(date)" >> security-results/pylint-report-multimodal-embedding-serving.txt
@@ -234,7 +234,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: pylint-report-multimodal-embedding-serving
-          path: microservices/multimodal-embedding-serving/security-results/pylint-report-multimodal-embedding-serving.txt
+          path: services/multimodal-embedding/security-results/pylint-report-multimodal-embedding-serving.txt
 
   # ShellCheck scanning job
   shellcheck-scan:
@@ -257,7 +257,7 @@ jobs:
           echo "" >> security-results/shellcheck-report-multimodal-embedding-serving.txt
           
           # Find all shell scripts and check them
-          find microservices/multimodal-embedding-serving/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
+          find services/multimodal-embedding/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
             echo "Checking: $file" >> security-results/shellcheck-report-multimodal-embedding-serving.txt
             shellcheck "$file" >> security-results/shellcheck-report-multimodal-embedding-serving.txt 2>&1 || true
             echo "---" >> security-results/shellcheck-report-multimodal-embedding-serving.txt

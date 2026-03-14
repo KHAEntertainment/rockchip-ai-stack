@@ -53,7 +53,7 @@ This section shows how to build the Video Search and Summary sample application 
 
    **3.2 Building Images**
 
-   The build script provides options to build and push the images. Build script provides option to build only the application microservices or build together with all the dependent microservices. The dependent microservices are the following microservices: [Multimodal Embedding](../../../../microservices/multimodal-embedding-serving/), [Audio Analyzer](../../../../microservices/audio-analyzer/), [VDMS based data preparation](../../../../microservices/visual-data-preparation-for-retrieval/vdms/), and [VLM microservice](../../../../microservices/vlm-openvino-serving/).
+   The build script provides options to build and push the images. Build script provides option to build only the application microservices or build together with all the dependent microservices. The dependent microservices are the following microservices: [Multimodal Embedding](../../../../services/multimodal-embedding/), [Audio Analyzer](../../../../services/audio-analyzer/), [VDMS based data preparation](../../../../services/visual-data-preparation-for-retrieval/), and [VLM microservice](../../../../services/vlm-openvino-serving/).
 
    ```bash
 

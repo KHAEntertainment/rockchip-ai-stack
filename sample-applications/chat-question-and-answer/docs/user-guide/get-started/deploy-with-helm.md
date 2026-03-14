@@ -9,8 +9,8 @@ Before you begin, ensure that you have the following prerequisites:
 - The cluster must support **dynamic provisioning of Persistent Volumes (PV)**. Refer to the [Kubernetes Dynamic Provisioning Guide](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/) for more details.
 - Install `kubectl` on your system. Refer to [Installation Guide](https://kubernetes.io/docs/tasks/tools/install-kubectl/). Ensure access to the Kubernetes cluster.
 - Helm installed on your system: [Installation Guide](https://helm.sh/docs/intro/install/).
-- Model download microservice is deployed using Helm and is up and running (required for OVMS). Refer to the [Deploy with Helm Guide](../../../../microservices/model-download/docs/user-guide/deploy-with-helm.md) for deployment instructions.
-- Ensure the Model Download Helm chart is deployed and the `model-download` microservice is up and running before deploying ChatQnA. Refer to the [Model Download Get Started Guide](../../../../../microservices/model-download/docs/user-guide/get-started.md).
+- Model download microservice is deployed using Helm and is up and running (required for OVMS). Refer to the [Deploy with Helm Guide](../../../../services/model-download/docs/user-guide/deploy-with-helm.md) for deployment instructions.
+- Ensure the Model Download Helm chart is deployed and the `model-download` microservice is up and running before deploying ChatQnA. Refer to the [Model Download Get Started Guide](../../../../../services/model-download/docs/user-guide/get-started.md).
 
 ## Steps to deploy with Helm
 
@@ -60,7 +60,7 @@ Note: If deploying from a cloned repo, the user can choose to edit only the `val
 
 Ensure you set the `huggingface.apiToken`, proxy settings, and `dataprepPgvector.env.ALLOWED_HOSTS` as required.
 
-For detailed guidance on configuring `ALLOWED_HOSTS` for different deployment scenarios, refer [ALLOWED_HOSTS Configuration](../../../../../microservices/document-ingestion/pgvector/docs/user-guide/get-started.md#allowed_hosts-configuration).
+For detailed guidance on configuring `ALLOWED_HOSTS` for different deployment scenarios, refer [ALLOWED_HOSTS Configuration](../../../../../services/document-ingestion/docs/user-guide/get-started.md#allowed_hosts-configuration).
 
 | Key | Description | Example Value |
 | --- | ----------- | ------------- |

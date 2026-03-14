@@ -19,7 +19,7 @@ on:
       - 'sample-applications/chat-question-and-answer-core/**'
       - 'sample-applications/chat-question-and-answer/**'
       - 'sample-applications/document-summarization/**'
-      - 'microservices/document-ingestion/pgvector/**'
+      - 'services/document-ingestion/pgvector/**'
 
 jobs:
   zizmor-workflow-scan:
@@ -66,7 +66,7 @@ jobs:
         uses: ./.github/actions/discover-changed-subfolders
         with:
           project_folder: "."
-          include_folders: "sample-applications/chat-question-and-answer-core,sample-applications/chat-question-and-answer,sample-applications/document-summarization,microservices/document-ingestion/pgvector"
+          include_folders: "sample-applications/chat-question-and-answer-core,sample-applications/chat-question-and-answer,sample-applications/document-summarization,services/document-ingestion/pgvector"
 
       - name: Debug Changed Projects
         shell: bash
@@ -618,7 +618,7 @@ jobs:
     needs: detect-changes
     permissions:
       contents: read
-    if: contains(fromJson(needs.detect-changes.outputs.changed_projects), 'microservices/document-ingestion/pgvector')
+    if: contains(fromJson(needs.detect-changes.outputs.changed_projects), 'services/document-ingestion/pgvector')
     runs-on: ubuntu-22.04-32core-128GB
     env:
       HUGGINGFACEHUB_API_TOKEN: ${{ secrets.HUGGINGFACE_API_TOKEN }}   
@@ -635,7 +635,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          cd microservices/document-ingestion/pgvector/
+          cd services/document-ingestion/pgvector/
           echo "Running unit test cases"
           python3.12 -m venv venv
           source venv/bin/activate
@@ -662,10 +662,10 @@ jobs:
       #   with:
       #     name: doc_ing-coverage-report
       #     path: |
-      #       microservices/document-ingestion/pgvector/pytest-coverage-doc_ing.html
-      #       microservices/document-ingestion/pgvector/pytest-report-doc_ing.html
-      #       # microservices/document-ingestion/pgvector/htmlcov/index.html
-      #       # microservices/document-ingestion/pgvector/coverage-html/index.html
+      #       services/document-ingestion/pgvector/pytest-coverage-doc_ing.html
+      #       services/document-ingestion/pgvector/pytest-report-doc_ing.html
+      #       # services/document-ingestion/pgvector/htmlcov/index.html
+      #       # services/document-ingestion/pgvector/coverage-html/index.html
       
      
       - name: trivy repo scan
@@ -673,7 +673,7 @@ jobs:
         shell: bash
         run: |
           pwd
-          cd microservices/document-ingestion/pgvector/
+          cd services/document-ingestion/pgvector/
           trivy --version
           trivy image --download-db-only
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o trivy-html.tpl
@@ -688,7 +688,7 @@ jobs:
         with:
           name: trivy-code-scan-results-doc_ing
           path: |
-              microservices/document-ingestion/pgvector/trivy_code_scan_doc_ing.html
+              services/document-ingestion/pgvector/trivy_code_scan_doc_ing.html
       
       - name: ClamAV Antivirus Scan
         continue-on-error: true
@@ -697,13 +697,13 @@ jobs:
           echo "Starting ClamAV scan on sample-applications/chat-question-and-answer/..."
           
           docker run --rm \
-            --mount type=bind,source=./microservices/document-ingestion/pgvector/,target=/scandir \
+            --mount type=bind,source=./services/document-ingestion/pgvector/,target=/scandir \
             clamav/clamav:stable \
             clamscan --recursive --log=/scandir/clamav-scan-report.log \
             /scandir
           
           SCAN_EXIT_CODE=$?
-          sudo chown $USER:$USER microservices/document-ingestion/pgvector/clamav-scan-report.log 2>/dev/null || true
+          sudo chown $USER:$USER services/document-ingestion/pgvector/clamav-scan-report.log 2>/dev/null || true
           
           if [ $SCAN_EXIT_CODE -ne 0 ]; then
             echo "ClamAV scan failed or found issues"
@@ -716,7 +716,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: antivirus-report-doc
-          path: microservices/document-ingestion/pgvector/clamav-scan-report.log
+          path: services/document-ingestion/pgvector/clamav-scan-report.log
       
       - name: Trivy Image Scan
         continue-on-error: true
@@ -725,9 +725,9 @@ jobs:
               echo "print pwd"
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o trivy-html.tpl
               echo "Building image doc_ing-backend and scanning"
-              docker build -f ./microservices/document-ingestion/pgvector/docker/Dockerfile -t doc_ing-backend:latest ./microservices/document-ingestion/pgvector/
-              trivy image doc_ing-backend:latest --ignore-unfixed --format template --template "@trivy-html.tpl" -o microservices/document-ingestion/pgvector/trivy_image_scan_doc_ing.html
-              trivy image --quiet --format spdx-json --output microservices/document-ingestion/pgvector/trivy_image_scan_doc_ing.spdx.json doc_ing-backend:latest
+              docker build -f ./services/document-ingestion/pgvector/docker/Dockerfile -t doc_ing-backend:latest ./services/document-ingestion/pgvector/
+              trivy image doc_ing-backend:latest --ignore-unfixed --format template --template "@trivy-html.tpl" -o services/document-ingestion/pgvector/trivy_image_scan_doc_ing.html
+              trivy image --quiet --format spdx-json --output services/document-ingestion/pgvector/trivy_image_scan_doc_ing.spdx.json doc_ing-backend:latest
               echo "completed doc_ing-backend scanning"
             
               
@@ -739,8 +739,8 @@ jobs:
         with:
           name: Trivy image scan report-doc
           path: |
-                microservices/document-ingestion/pgvector/trivy_image_scan_doc_ing.html
-                microservices/document-ingestion/pgvector/trivy_image_scan_doc_ing.spdx.json
+                services/document-ingestion/pgvector/trivy_image_scan_doc_ing.html
+                services/document-ingestion/pgvector/trivy_image_scan_doc_ing.spdx.json
       
       - name: Run Bandit Security Scan
         continue-on-error: true
@@ -748,7 +748,7 @@ jobs:
         run: |
           echo "Running Bandit security scan..."
           
-          python -m bandit -r microservices/document-ingestion/ -v --exit-zero > bandit_scan_report_summary_doc_ing.txt || echo "Bandit found security issues"
+          python -m bandit -r services/document-ingestion/ -v --exit-zero > bandit_scan_report_summary_doc_ing.txt || echo "Bandit found security issues"
           
           echo "Bandit scan completed"
       

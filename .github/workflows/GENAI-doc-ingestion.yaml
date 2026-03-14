@@ -16,7 +16,7 @@ on:
     branches:
       - main
     paths:
-      - 'microservices/document-ingestion/**'
+      - 'services/document-ingestion/**'
 
 jobs:
    
@@ -31,7 +31,7 @@ jobs:
       
       - name: Build Docker image
         run: |
-          cd microservices/document-ingestion/pgvector/
+          cd services/document-ingestion/pgvector/
           
           # Set environment variables
           export TAG=latest
@@ -55,7 +55,7 @@ jobs:
           scan-scope: "all"  
           severity: "HIGH,CRITICAL" 
           format: "json"
-          scan_target: "microservices/document-ingestion/"
+          scan_target: "services/document-ingestion/"
           report_suffix: "-fs-document-ingestion-CT7"
       
          
@@ -88,7 +88,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/document-ingestion/pgvector/docker/"
+          scan_target: "services/document-ingestion/pgvector/docker/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -114,7 +114,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/document-ingestion/"
+          paths: "services/document-ingestion/"
           report_suffix: "-bandit-document-ingestion-CT161"
           
       - name: Upload Report
@@ -138,7 +138,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/document-ingestion/"
+          paths: "services/document-ingestion/"
           exclude_dirs: ".git,tests,.pytest_cache,__pycache__,.venv"
           
       - name: Upload Report
@@ -176,7 +176,7 @@ jobs:
           
       - name: Scan for secrets
         run: |
-          gitleaks dir "microservices/document-ingestion/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-document-ingestion.json -r gitleaks-document-ingestion.json || true
+          gitleaks dir "services/document-ingestion/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-document-ingestion.json -r gitleaks-document-ingestion.json || true
           
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
@@ -203,13 +203,13 @@ jobs:
           
       - name: Install dependencies and pylint
         run: |
-          cd microservices/document-ingestion/pgvector/
+          cd services/document-ingestion/pgvector/
           poetry install --with dev || true
           poetry add --group dev pylint || true
       
       - name: Run pylint
         run: |
-          cd microservices/document-ingestion/pgvector/
+          cd services/document-ingestion/pgvector/
           mkdir -p security-results
           echo "=== Pylint Scan Results - Document Ingestion ===" > security-results/pylint-report-document-ingestion.txt
           echo "Scan Date: $(date)" >> security-results/pylint-report-document-ingestion.txt
@@ -237,7 +237,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: pylint-report-document-ingestion
-          path: microservices/document-ingestion/pgvector/security-results/pylint-report-document-ingestion.txt
+          path: services/document-ingestion/pgvector/security-results/pylint-report-document-ingestion.txt
 
   # ShellCheck scanning job
   shellcheck-scan:
@@ -260,7 +260,7 @@ jobs:
           echo "" >> security-results/shellcheck-report-document-ingestion.txt
           
           # Find all shell scripts and check them
-          find microservices/document-ingestion/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
+          find services/document-ingestion/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
             echo "Checking: $file" >> security-results/shellcheck-report-document-ingestion.txt
             shellcheck "$file" >> security-results/shellcheck-report-document-ingestion.txt 2>&1 || true
             echo "---" >> security-results/shellcheck-report-document-ingestion.txt

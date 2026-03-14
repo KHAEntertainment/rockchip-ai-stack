@@ -16,7 +16,7 @@ on:
     branches:
       - main
     paths:
-      - 'microservices/visual-data-preparation-for-retrieval/**'
+      - 'services/visual-data-preparation-for-retrieval/**'
 
 jobs:
    
@@ -32,12 +32,12 @@ jobs:
       - name: Build Docker images
         run: |          
           # Build VDMS dataprep microservice (Poetry-based FastAPI)
-          cd microservices/visual-data-preparation-for-retrieval/vdms/
+          cd services/visual-data-preparation-for-retrieval/vdms/
           docker build -f ./docker/Dockerfile -t vdms-dataprep:latest .
           
           # Build Milvus dataprep microservice (requirements.txt-based)
-          # Note: Build context must be microservices/ to access both visual-data-preparation-for-retrieval and vector-retriever
-          cd ../../../microservices/
+          # Note: Build context must be services/ to access both visual-data-preparation-for-retrieval and vector-retriever
+          cd ../../../services/
           docker build -f visual-data-preparation-for-retrieval/milvus/src/Dockerfile -t milvus-dataprep:latest .
           
       - name: Verify Docker images
@@ -54,7 +54,7 @@ jobs:
           scan-scope: "all"  
           severity: "HIGH,CRITICAL" 
           format: "json"
-          scan_target: "microservices/visual-data-preparation-for-retrieval/"
+          scan_target: "services/visual-data-preparation-for-retrieval/"
           report_suffix: "-fs-visual-data-preparation-CT7"
       
          
@@ -112,7 +112,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/visual-data-preparation-for-retrieval/vdms/docker/"
+          scan_target: "services/visual-data-preparation-for-retrieval/vdms/docker/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -122,7 +122,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/visual-data-preparation-for-retrieval/milvus/src/"
+          scan_target: "services/visual-data-preparation-for-retrieval/milvus/src/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -154,7 +154,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/visual-data-preparation-for-retrieval/"
+          paths: "services/visual-data-preparation-for-retrieval/"
           report_suffix: "-bandit-visual-data-preparation-CT161"
           
       - name: Upload Report
@@ -178,7 +178,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/visual-data-preparation-for-retrieval/"
+          paths: "services/visual-data-preparation-for-retrieval/"
           exclude_dirs: ".git,tests,.pytest_cache,__pycache__,.venv"
           
       - name: Upload Report
@@ -216,7 +216,7 @@ jobs:
           
       - name: Scan for secrets
         run: |
-          gitleaks dir "microservices/visual-data-preparation-for-retrieval/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-visual-data-preparation.json -r gitleaks-visual-data-preparation.json || true
+          gitleaks dir "services/visual-data-preparation-for-retrieval/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-visual-data-preparation.json -r gitleaks-visual-data-preparation.json || true
           
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
@@ -243,14 +243,14 @@ jobs:
           
       - name: Install dependencies and pylint
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/vdms/
+          cd services/visual-data-preparation-for-retrieval/vdms/
           poetry lock --no-update
           poetry install --with dev || true
           poetry add --group dev pylint || true
       
       - name: Run pylint
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/vdms/
+          cd services/visual-data-preparation-for-retrieval/vdms/
           mkdir -p security-results
           echo "=== Pylint Scan Results - VDMS DataPrep ===" > security-results/pylint-report-vdms-dataprep.txt
           echo "Scan Date: $(date)" >> security-results/pylint-report-vdms-dataprep.txt
@@ -278,7 +278,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: pylint-report-vdms-dataprep
-          path: microservices/visual-data-preparation-for-retrieval/vdms/security-results/pylint-report-vdms-dataprep.txt
+          path: services/visual-data-preparation-for-retrieval/vdms/security-results/pylint-report-vdms-dataprep.txt
 
   # Python linting with pylint - Milvus DataPrep (requirements.txt-based)
   pylint-scan-milvus-dataprep:
@@ -295,13 +295,13 @@ jobs:
       
       - name: Install dependencies and pylint
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/milvus/src/
+          cd services/visual-data-preparation-for-retrieval/milvus/src/
           pip install -r requirements.txt
           pip install pylint
       
       - name: Run pylint
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/milvus/src/
+          cd services/visual-data-preparation-for-retrieval/milvus/src/
           mkdir -p security-results
           echo "=== Pylint Scan Results - Milvus DataPrep ===" > security-results/pylint-report-milvus-dataprep.txt
           echo "Scan Date: $(date)" >> security-results/pylint-report-milvus-dataprep.txt
@@ -329,7 +329,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: pylint-report-milvus-dataprep
-          path: microservices/visual-data-preparation-for-retrieval/milvus/src/security-results/pylint-report-milvus-dataprep.txt
+          path: services/visual-data-preparation-for-retrieval/milvus/src/security-results/pylint-report-milvus-dataprep.txt
 
   # Black code formatting check - VDMS
   black-check-vdms:
@@ -350,13 +350,13 @@ jobs:
           
       - name: Install dependencies
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/vdms/
+          cd services/visual-data-preparation-for-retrieval/vdms/
           poetry lock --no-update
           poetry install --with dev || true
       
       - name: Run Black formatting check
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/vdms/
+          cd services/visual-data-preparation-for-retrieval/vdms/
           mkdir -p security-results
           echo "=== Black Code Formatting Check Results - VDMS ===" > security-results/black-check-report-vdms.txt
           echo "Scan Date: $(date)" >> security-results/black-check-report-vdms.txt
@@ -371,7 +371,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: black-check-report-vdms
-          path: microservices/visual-data-preparation-for-retrieval/vdms/security-results/black-check-report-vdms.txt
+          path: services/visual-data-preparation-for-retrieval/vdms/security-results/black-check-report-vdms.txt
 
   # Black code formatting check - Milvus
   black-check-milvus:
@@ -388,13 +388,13 @@ jobs:
       
       - name: Install dependencies
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/milvus/src/
+          cd services/visual-data-preparation-for-retrieval/milvus/src/
           pip install -r requirements.txt
           pip install black
       
       - name: Run Black formatting check
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/milvus/src/
+          cd services/visual-data-preparation-for-retrieval/milvus/src/
           mkdir -p security-results
           echo "=== Black Code Formatting Check Results - Milvus ===" > security-results/black-check-report-milvus.txt
           echo "Scan Date: $(date)" >> security-results/black-check-report-milvus.txt
@@ -409,7 +409,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: black-check-report-milvus
-          path: microservices/visual-data-preparation-for-retrieval/milvus/src/security-results/black-check-report-milvus.txt
+          path: services/visual-data-preparation-for-retrieval/milvus/src/security-results/black-check-report-milvus.txt
 
   # isort import sorting check - VDMS
   isort-check-vdms:
@@ -430,13 +430,13 @@ jobs:
           
       - name: Install dependencies
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/vdms/
+          cd services/visual-data-preparation-for-retrieval/vdms/
           poetry lock --no-update
           poetry install --with dev || true
       
       - name: Run isort import sorting check
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/vdms/
+          cd services/visual-data-preparation-for-retrieval/vdms/
           mkdir -p security-results
           echo "=== isort Import Sorting Check Results - VDMS ===" > security-results/isort-check-report-vdms.txt
           echo "Scan Date: $(date)" >> security-results/isort-check-report-vdms.txt
@@ -451,7 +451,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: isort-check-report-vdms
-          path: microservices/visual-data-preparation-for-retrieval/vdms/security-results/isort-check-report-vdms.txt
+          path: services/visual-data-preparation-for-retrieval/vdms/security-results/isort-check-report-vdms.txt
 
   # isort import sorting check - Milvus
   isort-check-milvus:
@@ -468,13 +468,13 @@ jobs:
       
       - name: Install dependencies
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/milvus/src/
+          cd services/visual-data-preparation-for-retrieval/milvus/src/
           pip install -r requirements.txt
           pip install isort
       
       - name: Run isort import sorting check
         run: |
-          cd microservices/visual-data-preparation-for-retrieval/milvus/src/
+          cd services/visual-data-preparation-for-retrieval/milvus/src/
           mkdir -p security-results
           echo "=== isort Import Sorting Check Results - Milvus ===" > security-results/isort-check-report-milvus.txt
           echo "Scan Date: $(date)" >> security-results/isort-check-report-milvus.txt
@@ -489,7 +489,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: isort-check-report-milvus
-          path: microservices/visual-data-preparation-for-retrieval/milvus/src/security-results/isort-check-report-milvus.txt
+          path: services/visual-data-preparation-for-retrieval/milvus/src/security-results/isort-check-report-milvus.txt
 
   # ShellCheck scanning job
   shellcheck-scan:
@@ -512,7 +512,7 @@ jobs:
           echo "" >> security-results/shellcheck-report-visual-data-preparation.txt
           
           # Find all shell scripts and check them
-          find microservices/visual-data-preparation-for-retrieval/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
+          find services/visual-data-preparation-for-retrieval/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
             echo "Checking: $file" >> security-results/shellcheck-report-visual-data-preparation.txt
             shellcheck "$file" >> security-results/shellcheck-report-visual-data-preparation.txt 2>&1 || true
             echo "---" >> security-results/shellcheck-report-visual-data-preparation.txt

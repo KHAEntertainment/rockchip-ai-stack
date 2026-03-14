@@ -135,17 +135,17 @@ The key components of Video Search and Summarization mode are as follows:
 
    **Inference microservices**:
 
-    - [Multimodal Embedding](../../../../../microservices/multimodal-embedding-serving/) - Creates vector embeddings for semantic search.
+    - [Multimodal Embedding](../../../../../services/multimodal-embedding/) - Creates vector embeddings for semantic search.
 
-    - [Audio Analyzer](../../../../../microservices/audio-analyzer/) - Provides audio transcription capabilities.
+    - [Audio Analyzer](../../../../../services/audio-analyzer/) - Provides audio transcription capabilities.
 
-    - [VLM microservice](../../../../../microservices/vlm-openvino-serving/) - Generates captions for video content.
+    - [VLM microservice](../../../../../services/vlm-openvino-serving/) - Generates captions for video content.
 
    **Data-handling microservices**
 
-    - [VDMS-based data preparation](../../../../../microservices/visual-data-preparation-for-retrieval/vdms/) - Handles vector database storage and retrieval.
+    - [VDMS-based data preparation](../../../../../services/visual-data-preparation-for-retrieval/) - Handles vector database storage and retrieval.
 
-    - [Vector Retriever](../../../../../microservices/vector-retriever/) - Enables semantic search across the video collection.
+    - [Vector Retriever](../../../../../services/vector-retriever/) - Enables semantic search across the video collection.
 
    See the respective documentation for details.
 

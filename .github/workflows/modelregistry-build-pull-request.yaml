@@ -10,10 +10,10 @@ on:
     branches:
       - main
     paths:
-      - 'microservices/model-registry/**'
+      - 'services/model-registry/**'
   pull_request:
     paths:
-      - 'microservices/model-registry/**'
+      - 'services/model-registry/**'
   workflow_call:
   workflow_dispatch:
 permissions: {}
@@ -39,27 +39,27 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up prerequisites for Docker image build
-        working-directory: microservices/model-registry/docker
+        working-directory: services/model-registry/docker
         run: |
           mv .env.template .env
           sed -i "s/MR_MINIO_ACCESS_KEY=.*/MR_MINIO_ACCESS_KEY=test/g" .env
           sed -i "s/MR_MINIO_SECRET_KEY=.*/MR_MINIO_SECRET_KEY=test1234/g" .env
           sed -i "s/MR_PSQL_PASSWORD=.*/MR_PSQL_PASSWORD=test1234/g" .env
-          sudo bash ${{ github.workspace }}/microservices/model-registry/scripts/init_mr_data_dirs.sh
+          sudo bash ${{ github.workspace }}/services/model-registry/scripts/init_mr_data_dirs.sh
 
       - name: Build Docker images with Compose
-        working-directory: microservices/model-registry/docker
+        working-directory: services/model-registry/docker
         run: docker compose build
 
       - name: Start containers with Compose
-        working-directory: microservices/model-registry/docker
+        working-directory: services/model-registry/docker
         run: |
           docker compose up -d
           sleep 30  # Wait for services to start
           docker compose logs model-registry
 
       - name: Stop and remove containers and volumes
-        working-directory: microservices/model-registry/docker
+        working-directory: services/model-registry/docker
         run: docker compose down -v
 
   modelregistry-unit-tests:
@@ -76,7 +76,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd microservices/model-registry
+          cd services/model-registry
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f tests/requirements-tests.txt ]; then pip install -r tests/requirements-tests.txt; fi
 
@@ -84,7 +84,7 @@ jobs:
         id: run_tests
         run: |
           echo "Running unit tests"
-          cd microservices/model-registry
+          cd services/model-registry
           if [ -d tests ]; then PYTEST_OUTPUT=$(pytest -vv --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml tests/unit_tests/ 2>&1 || true)
           # echo "$PYTEST_OUTPUT"
           echo "$PYTEST_OUTPUT" > pytest_results.txt
@@ -92,7 +92,7 @@ jobs:
           echo "$PYTEST_OUTPUT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT; fi
         env:
-          PYTHONPATH: "${{ github.workspace }}/microservices/model-registry/src"
+          PYTHONPATH: "${{ github.workspace }}/services/model-registry/src"
       - name: Parse Pytest Results
         id: extract_summary
         run: |
@@ -134,9 +134,9 @@ jobs:
         with:
           name: pytest-results
           path: |
-            ${{ github.workspace }}/microservices/model-registry/pytest_results.txt
+            ${{ github.workspace }}/services/model-registry/pytest_results.txt
             ${{ github.workspace }}/pytest_summary.txt
-            ${{ github.workspace }}/microservices/model-registry/coverage.xml
+            ${{ github.workspace }}/services/model-registry/coverage.xml
   
   bandit-scans:
     name: Run Bandit Scan
@@ -158,7 +158,7 @@ jobs:
         docker pull ghcr.io/pycqa/bandit/bandit
         echo "### Bandit Scan Results" >> $GITHUB_STEP_SUMMARY
         docker images
-        docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/pycqa/bandit/bandit -r /src/edge-ai-libraries-repo/microservices/model-registry -f txt -o /src/reports/bandit-report.txt || true >> $GITHUB_STEP_SUMMARY
+        docker run --rm -v "${{ github.workspace }}:/src" ghcr.io/pycqa/bandit/bandit -r /src/edge-ai-libraries-repo/services/model-registry -f txt -o /src/reports/bandit-report.txt || true >> $GITHUB_STEP_SUMMARY
         cat reports/bandit-report.txt
         echo "Please find full report in bandit-report.txt" >> $GITHUB_STEP_SUMMARY
     - name: Upload Scan Reports
@@ -192,7 +192,7 @@ jobs:
         mkdir -p reports
         docker pull clamav/clamav
         echo "### Virus Scan Results" >> $GITHUB_STEP_SUMMARY
-        docker run --rm -v "${{ github.workspace }}:/src" clamav/clamav clamscan -r  /src/edge-ai-libraries/microservices/model-registry/ > ./reports/clamav-report.txt || true
+        docker run --rm -v "${{ github.workspace }}:/src" clamav/clamav clamscan -r  /src/edge-ai-libraries/services/model-registry/ > ./reports/clamav-report.txt || true
         echo "Please find full report in clamav-report.txt" >> $GITHUB_STEP_SUMMARY
     - name: Upload Scan Reports
       uses: actions/upload-artifact@v4

@@ -14,7 +14,7 @@ embedding, RAG, transcription, and vision-language inference, without OpenVINO o
 
 ## Overview
 
-Seven microservices ported to run natively on the RK3588 SoC. Every Intel dependency
+Services ported to run natively on the RK3588 SoC. Every Intel dependency
 (OpenVINO, openvino-genai, optimum-intel, pgvector, MinIO) has been replaced with
 hardware-neutral or Rockchip-native alternatives. All services ship with a working
 **CPU baseline on day one**; NPU acceleration paths are stubbed and ready to be wired
@@ -57,16 +57,19 @@ up once RKLLM SDK / RKNN-Toolkit2 are available on the target board.
 | `audio-analyzer` | 8002 | Whisper transcription via whisper.cpp | ✅ CPU |
 | `vlm-proxy` | 8082 | Video→frames proxy for llama-server (optional) | ✅ CPU |
 | `llama-server` | 8080 | LLM inference — external llama.cpp binary | ✅ llama.cpp |
+| `model-registry` | — | Model metadata registry (MLflow + MinIO) | ✅ Generic |
+| `vector-retriever` | — | Milvus vector database client | ✅ Generic |
+| `visual-data-preparation-for-retrieval` | — | Image/video embedding pipeline (PyTorch, optional OpenVINO) | ✅ Generic |
 
 ---
 
 ## Quick start
 
 Full startup instructions, environment variable reference, NPU roadmap, and smoke
-tests are in [`rk3588-port/`](./rk3588-port/README.md).
+tests are in [`services/`](./services/README.md).
 
 ```bash
-export PYTHONPATH="/path/to/rk3588-port:$PYTHONPATH"
+export PYTHONPATH="/path/to/services:$PYTHONPATH"
 
 # Start in dependency order:
 # 1. multimodal-embedding  :8001
@@ -82,7 +85,7 @@ export PYTHONPATH="/path/to/rk3588-port:$PYTHONPATH"
 ## Repository layout
 
 ```
-rk3588-port/        ← all active work lives here
+services/           ← all active services live here
   shared/           ← LanceDB schema, RKLLM/RKNN utils
   multimodal-embedding/
   document-ingestion/
@@ -90,16 +93,18 @@ rk3588-port/        ← all active work lives here
   chat-qa/
   audio-analyzer/
   vlm-proxy/
+  model-download/
+  multilevel-video-understanding/
+  model-registry/
+  vector-retriever/
+  visual-data-preparation-for-retrieval/
+  video-chunking-utils/
   README.md         ← detailed docs
   INTEGRATION.md    ← startup order, env vars, smoke tests
 
-microservices/      ← upstream Intel originals (reference only)
 libraries/          ← upstream Intel originals (reference only)
 frameworks/         ← upstream Intel originals (reference only)
 ```
-
-The `microservices/`, `libraries/`, and `frameworks/` trees are retained from upstream
-for reference during the port. They are not used or maintained.
 
 ---
 

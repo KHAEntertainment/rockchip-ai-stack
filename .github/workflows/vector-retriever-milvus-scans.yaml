@@ -42,7 +42,7 @@ jobs:
           scan-scope: "all"  
           severity: "HIGH,CRITICAL" 
           format: "json"
-          scan_target: "microservices/vector-retriever/milvus/"
+          scan_target: "services/vector-retriever/milvus/"
           report_suffix: "-fs-dataprep-visualdata-milvus-CT7"
 
 
@@ -75,7 +75,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/vector-retriever/milvus/src/"
+          scan_target: "services/vector-retriever/milvus/src/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -101,7 +101,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/vector-retriever/milvus"
+          paths: "services/vector-retriever/milvus"
           report_suffix: "-bandit-retriever-milvus-CT161"
 
       - name: Upload Report
@@ -125,7 +125,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/vector-retriever/milvus"
+          paths: "services/vector-retriever/milvus"
           exclude_dirs: ".git,tests,.pytest_cache,__pycache__,.venv"
 
       - name: Upload Report
