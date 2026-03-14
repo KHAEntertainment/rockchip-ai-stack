@@ -32,7 +32,7 @@ class DecordVideoDecoder(BaseVideoDecoder):
         # Initialize video reader without resize first to get original info
         # use lock to prevent concurrent access issues
         with vr_lock:
-            self.vr = self.robust_video_reader(self._video_path, ctx=cpu(0), num_threads=DECORD_NUM_THREADS)
+            self.vr, self._vr_temp_path = self.robust_video_reader(self._video_path, ctx=cpu(0), num_threads=DECORD_NUM_THREADS)
             # Get video information
             self.original_fps = self.vr.get_avg_fps()
             self._total_frames = len(self.vr)
@@ -54,12 +54,19 @@ class DecordVideoDecoder(BaseVideoDecoder):
         
         # Reinitialize video reader with resize if needed
         if self.resize_size is not None:
+            # Clean up the temp file from the first (no-resize) reader before replacing it
+            if self._vr_temp_path:
+                try:
+                    os.unlink(self._vr_temp_path)
+                except OSError:
+                    pass
+                self._vr_temp_path = None
             with vr_lock:
-                self.vr = self.robust_video_reader(
-                    self._video_path, 
-                    ctx=cpu(0), 
-                    num_threads=DECORD_NUM_THREADS, 
-                    width=self.resize_size[0], 
+                self.vr, self._vr_temp_path = self.robust_video_reader(
+                    self._video_path,
+                    ctx=cpu(0),
+                    num_threads=DECORD_NUM_THREADS,
+                    width=self.resize_size[0],
                     height=self.resize_size[1]
                 )
             self.scaled_width, self.scaled_height = self.resize_size
@@ -91,28 +98,31 @@ class DecordVideoDecoder(BaseVideoDecoder):
     def robust_video_reader(url, ctx=cpu(0), width=-1, height=-1, num_threads=0, verify_ssl=True):
         """
         Robust video loading functions, supporting HTTPS.
+
+        Returns:
+            (vr, temp_path): VideoReader and the path of the temporary file used
+            (or None if no temporary file was created).  The caller is responsible
+            for calling os.unlink(temp_path) once all frame reading is complete.
         """
         # For local file and HTTP files, directly use decord
         if not urlparse(url).scheme in ['https']:
-            return VideoReader(url, ctx=ctx, width=width, height=height, num_threads=num_threads)
-        
+            return VideoReader(url, ctx=ctx, width=width, height=height, num_threads=num_threads), None
+
         # For HTTPS URL, download first
         response = requests.get(url, stream=True, verify=verify_ssl, timeout=30)
         response.raise_for_status()
-        
-        # Create temporary files
+
+        # Create temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     temp_file.write(chunk)
             temp_path = temp_file.name
-        
+
         vr = VideoReader(temp_path, ctx=ctx, width=width, height=height, num_threads=num_threads)
-        
-        # Clean up temporary files
-        os.unlink(temp_path)
-        
-        return vr
+
+        # Return vr along with temp_path so the caller can clean up after reading
+        return vr, temp_path
 
     def decode_next(self, num_frames: int = 1) -> Tuple[List[np.ndarray], List[float]]:
         """
@@ -260,3 +270,9 @@ class DecordVideoDecoder(BaseVideoDecoder):
                     del self.vr
             except Exception as e:
                 print(f"Clean up resources: wait failed with unexpected error: {e}")
+        temp_path = getattr(self, '_vr_temp_path', None)
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass

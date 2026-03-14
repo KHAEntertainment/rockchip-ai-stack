@@ -4,6 +4,7 @@
 import os
 import yaml
 import asyncio
+from pathlib import Path
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +63,27 @@ app.add_middleware(
 )
 
 
+def _validate_download_path(models_dir: str, download_path: str) -> str:
+    """
+    Validate that download_path is relative and resolves inside models_dir.
+    Raises HTTPException(400) if the path would escape models_dir.
+    Returns the resolved absolute path.
+    """
+    if Path(download_path).is_absolute():
+        raise HTTPException(
+            status_code=400,
+            detail="download_path must be a relative path.",
+        )
+    resolved = os.path.normpath(os.path.join(models_dir, download_path))
+    abs_models_dir = os.path.abspath(models_dir)
+    if os.path.commonpath([abs_models_dir, resolved]) != abs_models_dir:
+        raise HTTPException(
+            status_code=400,
+            detail="download_path must not escape the models directory.",
+        )
+    return resolved
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     """
@@ -104,8 +126,9 @@ async def download_models(
         hf_token = os.getenv("HF_TOKEN")
 
         logger.info(f"Initiating model download for {len(request.models)} model(s)")
+        _validate_download_path(models_dir, download_path)
         job_ids = []
-        
+
         for model in request.models:
             # Check if the plugin's dependencies are installed
             is_plugin_available, error_reason = plugin_registry.check_plugin_dependencies(model.hub)
@@ -119,17 +142,13 @@ async def download_models(
             logger.info(f"Model '{model.name}' download initiated using hub '{model.hub}' with parameters: {extra_kwargs}")
 
             needs_conversion = model.is_ovms
-            model_download_path = os.path.join(models_dir, download_path)
-            
+            model_download_path = _validate_download_path(models_dir, download_path)
+
             if model.hub.lower() in [hub.value.lower() for hub in ModelHub] and not needs_conversion:
                 extra_kwargs["token"] = hf_token
                 # Remove fields that shouldn't be passed to plugins
                 extra_kwargs.pop("hub", None)
                 extra_kwargs.pop("is_ovms", None)
-                
-                model_download_path = os.path.join(
-                    models_dir, download_path
-                )
                 # Register download job
                 download_job_id = model_manager.register_job(
                     operation_type="download",
@@ -167,21 +186,22 @@ async def download_models(
                 # Get configuration for conversion
                 extra_kwargs["token"] = hf_token
                 config = model.config.dict() if model.config else {}
-                if config['device'] is not None and config['device'].upper() == "NPU":
+                device = (config.get("device") or "").upper()
+                if device == "NPU":
                     logger.warning("NPU target device selected. Only 'int4' weight format is supported for NPU. Overriding weight_format to 'int4'.")
-                    config['precision'] = "int4"
+                    config["precision"] = "int4"
 
-                if config["device"] is None:
-                    config["device"] = "CPU"
-                if config["precision"] is None:
-                    config["precision"] = "int8" 
+                config["device"] = config.get("device") or "CPU"
+                config["precision"] = config.get("precision") or "int8"
                 # Create a unique output directory for the converted model
-                convert_output_dir = os.path.join(
+                convert_output_dir = _validate_download_path(
                     models_dir,
-                    download_path,
-                    "openvino_models",
-                    config['device'],
-                    config['precision']
+                    os.path.join(
+                        download_path,
+                        "openvino_models",
+                        config['device'],
+                        config['precision']
+                    )
                 ).lower()
 
                 # Register conversion job
@@ -202,12 +222,13 @@ async def download_models(
                     model_manager.process_conversion(
                         job_id=convert_job_id,
                         model_path=download_path,
-                        hub=model.hub,
+                        hub="openvino",
                         output_dir=convert_output_dir,
                         converter="openvino",
                         model_name=model.name,
                         model_type=model.type,
                         hf_token=extra_kwargs["token"],
+                        source_hub=model.hub,
                         **config
                     )
                 )

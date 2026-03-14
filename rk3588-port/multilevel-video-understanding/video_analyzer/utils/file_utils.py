@@ -60,28 +60,31 @@ def is_video_file(file_name: str) -> bool:
 def robust_video_reader(url, ctx=cpu(0), width=-1, height=-1, num_threads=0, verify_ssl=True):
     """
     Robust video loading functions, supporting HTTPS.
+
+    Returns:
+        (vr, temp_path): VideoReader and the path of the temporary file used
+        (or None if no temporary file was created).  The caller is responsible
+        for calling os.unlink(temp_path) once all frame reading is complete.
     """
     # For local file and HTTP files, directly use decord
     if not urlparse(url).scheme in ['https']:
-        return VideoReader(url, ctx=ctx, width=width, height=height, num_threads=num_threads)
-    
+        return VideoReader(url, ctx=ctx, width=width, height=height, num_threads=num_threads), None
+
     # For HTTPS URL, download first
     response = requests.get(url, stream=True, verify=verify_ssl, timeout=30)
     response.raise_for_status()
-    
-    # Create temporary files
+
+    # Create temporary file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
                 temp_file.write(chunk)
         temp_path = temp_file.name
-    
+
     vr = VideoReader(temp_path, ctx=ctx, width=width, height=height, num_threads=num_threads)
-    
-    # Clean up temporary files
-    os.unlink(temp_path)
-    
-    return vr
+
+    # Return vr along with temp_path so the caller can clean up after reading
+    return vr, temp_path
 
 def validate_video_path(raw: str) -> str:
     """

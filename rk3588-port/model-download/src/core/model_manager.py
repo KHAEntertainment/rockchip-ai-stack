@@ -308,12 +308,12 @@ class ModelManager:
             if converter:
                 # User specifically requested a converter
                 convert_plugin = self.registry.get_plugin("converter", converter)
-            if not convert_plugin:
-                err_msg = f"Requested converter '{converter}' not found"
-                self._jobs[job_id]["status"] = "failed"
-                self._jobs[job_id]["error"] = err_msg
-                logger.error("converter_not_found", converter=converter)
-                raise ValueError(err_msg)
+                if not convert_plugin:
+                    err_msg = f"Requested converter '{converter}' not found"
+                    self._jobs[job_id]["status"] = "failed"
+                    self._jobs[job_id]["error"] = err_msg
+                    logger.error("converter_not_found", converter=converter)
+                    raise ValueError(err_msg)
             else:
                 # Auto-detect appropriate converter based on model path and kwargs
                 convert_plugin = self.registry.find_plugin_for_model(
@@ -457,9 +457,9 @@ class ModelManager:
                             raise
 
                 # All tasks completed successfully, perform any post-processing
-                result = plugin.post_process(
+                result = asyncio.run(plugin.post_process(
                     model_name, model_path, downloaded_paths, **kwargs
-                )
+                ))
 
                 # Update job status
                 self._jobs[job_id]["status"] = "completed"

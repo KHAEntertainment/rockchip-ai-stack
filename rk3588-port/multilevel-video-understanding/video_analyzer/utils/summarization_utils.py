@@ -39,7 +39,16 @@ def uniform_sample(items: List[Any], n: int) -> List[Any]:
 
     Returns:
         List of sampled items
+
+    Raises:
+        ValueError: if n is not a positive integer, items is empty, or n > len(items).
     """
+    if not isinstance(n, int) or n <= 0:
+        raise ValueError(f"n must be a positive integer, got {n!r}")
+    if not items:
+        raise ValueError("items must be non-empty")
+    if n > len(items):
+        raise ValueError(f"n ({n}) must not exceed the number of items ({len(items)})")
     gap = len(items) / n
     idxs = [int(i * gap + gap / 2) for i in range(n)]
     return [items[i] for i in idxs]

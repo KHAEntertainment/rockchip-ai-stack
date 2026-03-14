@@ -128,7 +128,7 @@ class VideoSummarizer:
 
         # Initialize video reader with lock to prevent concurrent access issues
         with self.vr_lock:
-            self.vr = robust_video_reader(self.video_path)
+            self.vr, self._vr_temp_path = robust_video_reader(self.video_path)
             self.origin_fps = round(self.vr.get_avg_fps())
             self.numFrame = len(self.vr)
             self.length = self.numFrame / self.origin_fps
@@ -554,4 +554,13 @@ class ModelConfig:
     def refresh(self):
         """Reprint information (for debugging purposes)"""
         self.__class__._printed = False
+
+    def __del__(self):
+        """Clean up temporary video file if one was created by robust_video_reader."""
+        temp_path = getattr(self, "_vr_temp_path", None)
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
         self._print_info()
