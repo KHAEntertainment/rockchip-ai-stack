@@ -303,9 +303,16 @@ async def download_documents(
         file_size = DataStore.get_document_size(bucket_name, file_name)
         file_stream = await DataStore.download_document(bucket_name, file_name)
 
+        # Quote the filename and add RFC 5987 percent-encoded filename* for Unicode/special chars
+        import urllib.parse
+        quoted_name = file_name.replace("\\", "\\\\").replace('"', '\\"')
+        encoded_name = urllib.parse.quote(file_name, safe="")
         headers = {
             "Content-Length": f"{file_size}",
-            "Content-Disposition": f"attachment; filename={file_name}",
+            "Content-Disposition": (
+                f'attachment; filename="{quoted_name}"; '
+                f"filename*=UTF-8''{encoded_name}"
+            ),
         }
         return StreamingResponse(
             file_stream,

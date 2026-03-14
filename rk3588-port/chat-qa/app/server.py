@@ -139,12 +139,6 @@ async def health_check():
     embed_host = embedding_endpoint.split("//")[-1].split("/")[0].lower()
     result.append(await check_server_health(embed_host, "Embedding model server"))
 
-    if any(status["status"] != "healthy" for status in result):
-        raise HTTPException(
-            status_code=503,
-            detail="LLM/Embedding model server is not ready",
-        )
-
     return result
 
 
@@ -186,6 +180,11 @@ async def query_chain(payload: QuestionRequest):
     """
     try:
         conversation_messages = payload.conversation_messages
+        if not conversation_messages:
+            raise HTTPException(
+                status_code=422,
+                detail="conversation_messages must contain at least one message",
+            )
         question_text = conversation_messages[-1].content
 
         max_tokens = payload.max_tokens if payload.max_tokens else 512

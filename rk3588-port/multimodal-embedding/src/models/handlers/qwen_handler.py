@@ -167,6 +167,9 @@ class QwenEmbeddingHandler(BaseEmbeddingModel):
         if isinstance(texts, str):
             texts = [texts]
 
+        if self.model is None or self.tokenizer is None:
+            self.load_model()
+
         if self.use_npu:
             # TODO: RKLLM — encode via RKLLM NPU
             arr: np.ndarray = self._rkllm.encode(texts)  # (N, 2048) float32

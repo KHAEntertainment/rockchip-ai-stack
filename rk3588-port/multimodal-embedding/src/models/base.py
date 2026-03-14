@@ -56,10 +56,12 @@ class BaseEmbeddingModel(ABC):
         self.ov_models_dir = model_config.get("ov_models_dir", "ov_models")
         default_modalities = {"text", "image"}
         config_modalities = model_config.get("modalities")
-        if config_modalities:
-            self.supported_modalities = set(config_modalities)
-        else:
+        if config_modalities is None:
             self.supported_modalities = default_modalities
+        elif isinstance(config_modalities, str):
+            self.supported_modalities = {config_modalities}
+        else:
+            self.supported_modalities = set(config_modalities)
 
     @abstractmethod
     def load_model(self) -> None:

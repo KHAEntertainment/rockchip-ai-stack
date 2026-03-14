@@ -96,7 +96,7 @@ class AudioExtractor:
             return output_path
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(None, _blocking_extract)
         except ValueError as e:
             # "No audio stream" — surface as 400

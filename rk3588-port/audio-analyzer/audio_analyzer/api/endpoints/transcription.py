@@ -1,6 +1,7 @@
 # Copyright (C) 2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+import os
 import traceback
 from typing import Annotated
 
@@ -61,49 +62,59 @@ async def transcribe_video(
 
         # Get video path from direct upload
         video_path, filename = await get_video_path(request)
+        audio_path = None
 
-        # Extract audio from video
-        audio_path = await AudioExtractor.extract_audio(video_path)
-        logger.debug(f"Audio extracted successfully to: {audio_path}")
+        try:
+            # Extract audio from video
+            audio_path = await AudioExtractor.extract_audio(video_path)
+            logger.debug(f"Audio extracted successfully to: {audio_path}")
 
-        # Get file duration
-        duration = get_file_duration(video_path)
-        logger.debug(f"File duration: {duration} seconds")
+            # Get file duration
+            duration = get_file_duration(video_path)
+            logger.debug(f"File duration: {duration} seconds")
 
-        logger.info(f"Initializing transcription service with model: {request.model_name}, device: {request.device}")
-        transcriber = TranscriptionService(
-            model_name=request.model_name,
-            device=request.device
-        )
+            logger.info(f"Initializing transcription service with model: {request.model_name}, device: {request.device}")
+            transcriber = TranscriptionService(
+                model_name=request.model_name,
+                device=request.device
+            )
 
-        # Perform transcription
-        job_id, transcript_path = await transcriber.transcribe(
-            audio_path,
-            language=language,
-            include_timestamps=request.include_timestamps,
-            video_duration=duration  # Pass the video duration to optimize processing
-        )
+            # Perform transcription
+            job_id, transcript_path = await transcriber.transcribe(
+                audio_path,
+                language=language,
+                include_timestamps=request.include_timestamps,
+                video_duration=duration  # Pass the video duration to optimize processing
+            )
 
-        # Store the transcript output using the local filesystem backend
-        output_location = store_transcript_output(
-            transcript_path,
-            job_id,
-            filename
-        )
+            # Store the transcript output using the local filesystem backend
+            output_location = store_transcript_output(
+                transcript_path,
+                job_id,
+                filename
+            )
 
-        if not output_location:
-            raise Exception("Failed to store transcript output.")
+            if not output_location:
+                raise Exception("Failed to store transcript output.")
 
-        logger.info(f"Transcription completed using {transcriber.backend.value} on {transcriber.device_type.value}")
+            logger.info(f"Transcription completed using {transcriber.backend.value} on {transcriber.device_type.value}")
 
-        return TranscriptionResponse(
-            status=TranscriptionStatus.COMPLETED,
-            message="Transcription completed successfully",
-            job_id=job_id,
-            transcript_path=output_location,
-            video_name=filename,
-            video_duration=duration
-        )
+            return TranscriptionResponse(
+                status=TranscriptionStatus.COMPLETED,
+                message="Transcription completed successfully",
+                job_id=job_id,
+                transcript_path=output_location,
+                video_name=filename,
+                video_duration=duration
+            )
+
+        finally:
+            for path in (video_path, audio_path):
+                if path and os.path.exists(path):
+                    try:
+                        os.unlink(path)
+                    except OSError as exc:
+                        logger.warning(f"Failed to remove temporary file {path}: {exc}")
 
     except HTTPException as http_exc:
         raise http_exc

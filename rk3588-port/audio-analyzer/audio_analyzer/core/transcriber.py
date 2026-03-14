@@ -262,7 +262,6 @@ class TranscriptionService:
                 logger.debug(f"Using default {n_processors} processor(s) as video duration is unknown")
 
             params["beam_search"] = {"beam_size": 5, "patience": 1.5}  # Use small beam size for faster inference
-            params["greedy"] = {"best_of": 1}    # Only consider one candidate
 
             # Perform transcription
             logger.debug(f"Starting whispercpp transcription with {n_processors} processors")
@@ -270,6 +269,7 @@ class TranscriptionService:
             segments = self.model.transcribe(
                 str(audio_path),
                 n_processors=n_processors,
+                params_sampling_strategy=1,
                 **params
             )
 

@@ -76,8 +76,9 @@ class RequestValidation:
             ErrorResponse: If the file's size in bytes is greater than settings.MAX_FILE_SIZE.
             None: If the file is within the allowed size.
         """
-        if file and file.size > settings.MAX_FILE_SIZE:
-            error_msg = f"File too large. Maximum allowed size is {settings.MAX_FILE_SIZE / (1024 * 1024)} MB"
+        size = getattr(file, "size", None)
+        if file and size is not None and size > settings.MAX_FILE_SIZE:
+            error_msg = f"File too large ({size / (1024 * 1024):.1f} MB). Maximum allowed size is {settings.MAX_FILE_SIZE / (1024 * 1024)} MB"
             logger.warning(f"Validation failed: {error_msg}")
             return ErrorResponse(
                 error_message="File too large",
@@ -143,7 +144,14 @@ class RequestValidation:
             None: If the model is valid or not provided.
         """
         if model and model.strip():
-            available_models = [m.value for m in settings.ENABLED_WHISPER_MODELS]
+            enabled = settings.ENABLED_WHISPER_MODELS or []
+            if not enabled:
+                logger.warning("Validation failed: no Whisper models are configured")
+                return ErrorResponse(
+                    error_message="No models configured",
+                    details="No Whisper models are enabled. Check ENABLED_WHISPER_MODELS configuration."
+                )
+            available_models = [m.value for m in enabled]
             if model.lower() not in available_models:
                 error_msg = f"Invalid model: {model}. Must be one of: {', '.join(available_models)}"
                 logger.warning(f"Validation failed: {error_msg}")
