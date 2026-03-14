@@ -33,7 +33,7 @@ up once RKLLM SDK / RKNN-Toolkit2 are available on the target board.
 
 ---
 
-## What changed from upstream
+## What changed from Intel Edge AI Origin:
 
 | Upstream (Intel) | This port |
 |------------------|-----------|
