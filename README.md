@@ -5,7 +5,7 @@
 A full-stack AI inference suite for **ARM64 boards powered by the Rockchip RK3588** —
 embedding, RAG, transcription, and vision-language inference, without OpenVINO or x86.
 
-> **Fork notice:** This project began as a fork of Intel's edge-ai-libraries (Apache 2.0). 
+> **Fork notice:** This project began as a fork of Intel's [edge-ai-libraries](https://github.com/open-edge-platform/edge-ai-libraries) (Apache 2.0). 
 > The original codebase provided the foundation; all Intel-specific dependencies have since 
 > been replaced with hardware-neutral or Rockchip-native alternatives. Thanks to the Intel 
 > contributors for the solid starting point.
