@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from pydantic import ValidationError
 
 from ..core.plugin_registry import PluginRegistry
@@ -26,15 +27,23 @@ app = FastAPI(
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_yaml_path = os.path.join(
-        os.path.dirname(__file__), 
+        os.path.dirname(__file__),
         "../../docs/user-guide/api-docs/openapi.yaml"
     )
-    
-    with open(openapi_yaml_path, 'r') as f:
-        app.openapi_schema = yaml.safe_load(f)
-    
+
+    try:
+        with open(openapi_yaml_path, 'r') as f:
+            app.openapi_schema = yaml.safe_load(f)
+    except (FileNotFoundError, OSError) as exc:
+        logger.warning(f"openapi.yaml not found or unreadable ({exc}); falling back to generated schema")
+        app.openapi_schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            routes=app.routes,
+        )
+
     return app.openapi_schema
 
 app.openapi = custom_openapi
@@ -54,10 +63,18 @@ for plugin_type in plugin_registry.plugins:
 
 
 # Add CORS middleware
+_cors_origins_raw = os.getenv("CORS_ALLOW_ORIGINS", "*")
+_cors_origins = _cors_origins_raw.split(",")
+_cors_credentials = _cors_origins_raw != "*"  # credentials require explicit origins
+if not _cors_credentials:
+    logger.warning(
+        "CORS_ALLOW_ORIGINS is '*'; setting allow_credentials=False "
+        "to comply with browser security requirements"
+    )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_credentials,
     allow_methods=os.getenv("CORS_ALLOW_METHODS", "*").split(","),
     allow_headers=os.getenv("CORS_ALLOW_HEADERS", "*").split(","),
 )
@@ -163,7 +180,7 @@ async def download_models(
                 job_ids.append(download_job_id)
                 
                 # Start download in background (async parallel execution)
-                asyncio.create_task(
+                _download_task = asyncio.create_task(
                     model_manager.process_download(
                         job_id=download_job_id,
                         model_name=model.name,
@@ -173,6 +190,13 @@ async def download_models(
                         **extra_kwargs
                     )
                 )
+
+                def _log_download_error(task, _job_id=download_job_id):
+                    exc = task.exception()
+                    if exc:
+                        logger.error(f"Background download task failed for job {_job_id}: {exc}")
+
+                _download_task.add_done_callback(_log_download_error)
 
             if needs_conversion:
                 # Check if OpenVINO plugin is available for conversion
@@ -218,7 +242,7 @@ async def download_models(
                 job_ids.append(convert_job_id)
                 
                 # Start conversion in background (async parallel execution)
-                asyncio.create_task(
+                _convert_task = asyncio.create_task(
                     model_manager.process_conversion(
                         job_id=convert_job_id,
                         model_path=download_path,
@@ -233,6 +257,13 @@ async def download_models(
                     )
                 )
 
+                def _log_convert_error(task, _job_id=convert_job_id):
+                    exc = task.exception()
+                    if exc:
+                        logger.error(f"Background conversion task failed for job {_job_id}: {exc}")
+
+                _convert_task.add_done_callback(_log_convert_error)
+
         # Return response immediately with job IDs
         return {
             "message": f"Started processing {len(request.models)} model(s)",
@@ -243,7 +274,7 @@ async def download_models(
         logger.error(f"Request validation failed: {str(e)}")
         raise HTTPException(
             status_code=422, detail=f"Invalid request format: {e.errors()}"
-        )
+        ) from e
     except HTTPException:
         raise
     except Exception as e:
@@ -251,7 +282,7 @@ async def download_models(
         raise HTTPException(
             status_code=500,
             detail=f"Unexpected error in model download process: {str(e)}",
-        )
+        ) from e
 
 
 @app.get("/models/jobs", tags=["Jobs"])
@@ -259,15 +290,11 @@ async def get_model_jobs(model_name: str):
     """
     Get all jobs related to a specific model.
     """
-    model_jobs = []
-    
-    for job_id, job in model_manager._jobs.items():
-        if job.get("model_name") == model_name:
-            model_jobs.append(job)
-    
+    model_jobs = [job for job in model_manager.list_jobs() if job.get("model_name") == model_name]
+
     if not model_jobs:
         raise HTTPException(status_code=404, detail=f"No jobs found for model {model_name}")
-    
+
     return {"jobs": model_jobs}
 
 
@@ -276,10 +303,11 @@ async def get_job_status(job_id: str):
     """
     Get the status of a specific job.
     """
-    if job_id not in model_manager._jobs:
+    job = model_manager.get_job_status(job_id)
+    if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    
-    return model_manager._jobs[job_id]
+
+    return job
 
 
 @app.get("/models/results", tags=["Models"])
@@ -312,7 +340,7 @@ async def list_jobs():
     """
     List all jobs.
     """
-    return {"jobs": list(model_manager._jobs.values())}
+    return {"jobs": model_manager.list_jobs()}
 
 
 @app.get("/plugins", tags=["Plugins"])
