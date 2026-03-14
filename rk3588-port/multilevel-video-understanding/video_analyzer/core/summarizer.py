@@ -82,7 +82,7 @@ class VideoSummarizer:
             raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=ErrorResponse(
-                        error_message=f"Summarization failed!",
+                        error_message="Summarization failed!",
                         details=f"Invalid levels is specified, levels must be integer and at least 1, got: {self.total_levels}"
                     ).model_dump()
                 )
@@ -90,12 +90,21 @@ class VideoSummarizer:
             raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=ErrorResponse(
-                        error_message=f"Summarization failed!",
+                        error_message="Summarization failed!",
                         details=f"The configured level sizes ({self.level_sizes}) "
                                 f"should match with total levels: {self.total_levels}"
                     ).model_dump()
                 )
-        
+        invalid = [s for s in self.level_sizes if not isinstance(s, int) or s <= 0]
+        if invalid:
+            raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=ErrorResponse(
+                        error_message="Summarization failed!",
+                        details=f"Each level size must be a positive integer; invalid entries: {invalid}"
+                    ).model_dump()
+                )
+
         # Parse processor_kwargs from user's request
         self.chunking_method = chunking_method
         self.process_fps = process_fps
@@ -104,7 +113,7 @@ class VideoSummarizer:
             raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=ErrorResponse(
-                        error_message=f"Summarization failed!",
+                        error_message="Summarization failed!",
                         details=f"Invalid process_fps is specified: ({self.process_fps}) "
                     ).model_dump()
                 )
@@ -129,7 +138,15 @@ class VideoSummarizer:
         # Initialize video reader with lock to prevent concurrent access issues
         with self.vr_lock:
             self.vr, self._vr_temp_path = robust_video_reader(self.video_path)
-            self.origin_fps = round(self.vr.get_avg_fps())
+            self.origin_fps = float(self.vr.get_avg_fps())
+            if self.origin_fps <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=ErrorResponse(
+                        error_message="Summarization failed!",
+                        details=f"Invalid source FPS: {self.origin_fps}"
+                    ).model_dump()
+                )
             self.numFrame = len(self.vr)
             self.length = self.numFrame / self.origin_fps
             
@@ -180,7 +197,7 @@ class VideoSummarizer:
             raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=ErrorResponse(
-                        error_message=f"Summarization failed!",
+                        error_message="Summarization failed!",
                         details=f"Unsupported video chunking method: {self.chunking_method}, "
                                 f"choices:[{PeltChunking.METHOD_NAME}, {UniformChunking.METHOD_NAME}]"
                     ).model_dump()
@@ -290,7 +307,7 @@ class VideoSummarizer:
             # total_levels = 1, degrading as a generic VLM summarization method
             if self.rootLevel == 0:
                 if len(self.chunklist_dict[0]) > 1:
-                    bad_summary = f"Error: Speficy total levels = 1, but got several chunks in level-0, this is not allowed!"
+                    bad_summary = "Error: Speficy total levels = 1, but got several chunks in level-0, this is not allowed!"
                     logger.error(bad_summary)
                     response = {
                         "summary": bad_summary,
@@ -345,9 +362,9 @@ class VideoSummarizer:
             summary = self.rootChunk.desc
             # Check for errors
             if summary.startswith("Error:"):
-                logger.error(f"Summarization failed!")
+                logger.error("Summarization failed!")
             else:
-                logger.info(f"Summarization completed successfully")
+                logger.info("Summarization completed successfully")
 
             response = {
                 "summary": summary,
@@ -501,7 +518,10 @@ class VideoSummarizer:
         start_frame_index = int(chunk.time_st * self.origin_fps)
         end_frame_index = int(chunk.time_end * self.origin_fps)
 
-        frame_idx = [i for i in range(start_frame_index, end_frame_index, int(self.origin_fps / self.process_fps))]
+        step = max(1, int(round(self.origin_fps / self.process_fps)))
+        frame_idx = list(range(start_frame_index, end_frame_index, step))
+        if not frame_idx and start_frame_index < end_frame_index:
+            frame_idx = [start_frame_index]
 
         if len(frame_idx) > settings.MAX_NUM_FRAMES_PER_CHUNK:
             logger.warning(f"Too many frames, reducing the number of frames to the allowed max frames: {settings.MAX_NUM_FRAMES_PER_CHUNK}")
@@ -519,6 +539,15 @@ class VideoSummarizer:
                 return []
 
         return frames
+
+    def __del__(self):
+        """Clean up temporary video file created by robust_video_reader, if any."""
+        temp_path = getattr(self, "_vr_temp_path", None)
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
 
 class ModelConfig:
@@ -556,11 +585,4 @@ class ModelConfig:
         self.__class__._printed = False
 
     def __del__(self):
-        """Clean up temporary video file if one was created by robust_video_reader."""
-        temp_path = getattr(self, "_vr_temp_path", None)
-        if temp_path:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
         self._print_info()

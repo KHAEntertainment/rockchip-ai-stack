@@ -564,8 +564,9 @@ class ModelManager:
         # Extract model name from path for job registration
         model_name = os.path.basename(model_path)
         job_id = self.register_job("convert", model_name, "openvino", output_dir, converter)
+        hf_token = kwargs.pop("hf_token", "")
         return asyncio.run(self.process_conversion(
-            job_id=job_id, model_path=model_path, model_name=model_name, hub="openvino", hf_token=kwargs.get("hf_token", ""), output_dir=output_dir, converter=converter, **kwargs
+            job_id=job_id, model_path=model_path, model_name=model_name, hub="openvino", hf_token=hf_token, output_dir=output_dir, converter=converter, **kwargs
         ))
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:

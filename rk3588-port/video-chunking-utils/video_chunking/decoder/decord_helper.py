@@ -35,11 +35,15 @@ class DecordVideoDecoder(BaseVideoDecoder):
             self.vr, self._vr_temp_path = self.robust_video_reader(self._video_path, ctx=cpu(0), num_threads=DECORD_NUM_THREADS)
             # Get video information
             self.original_fps = self.vr.get_avg_fps()
+            if self.original_fps <= 0:
+                raise ValueError(f"Video has non-positive FPS ({self.original_fps}): {video_path}")
             self._total_frames = len(self.vr)
-            self._duration = self._total_frames / self.original_fps if self._total_frames else None
+            if not self._total_frames:
+                raise ValueError(f"Video has no frames: {video_path}")
+            self._duration = self._total_frames / self.original_fps
             # Get original dimensions from first frame
             first_frame = self.vr[0].asnumpy()
-            
+
         self.original_height, self.original_width = first_frame.shape[:2]
         
         # Calculate resize parameters if needed
@@ -58,9 +62,9 @@ class DecordVideoDecoder(BaseVideoDecoder):
             if self._vr_temp_path:
                 try:
                     os.unlink(self._vr_temp_path)
-                except OSError:
-                    pass
-                self._vr_temp_path = None
+                    self._vr_temp_path = None
+                except OSError as exc:
+                    logger.warning(f"Failed to remove temporary file {self._vr_temp_path}: {exc}")
             with vr_lock:
                 self.vr, self._vr_temp_path = self.robust_video_reader(
                     self._video_path,

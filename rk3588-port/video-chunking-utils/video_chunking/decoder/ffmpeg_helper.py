@@ -18,6 +18,8 @@ class FFmpegVideoDecoder(BaseVideoDecoder):
         """
         import ffmpeg
         self._video_path = self._validate_video_path(video_path)
+        if not isinstance(sample_fps, (int, float)) or sample_fps <= 0:
+            raise ValueError("sample_fps must be > 0")
         self.sample_fps = sample_fps
         self.longest_side_size = longest_side_size
         
@@ -106,13 +108,14 @@ class FFmpegVideoDecoder(BaseVideoDecoder):
         # Read requested number of frames
         for _ in range(num_frames):
             # Read frame from ffmpeg process
-            in_bytes = self.process.stdout.read(self.new_width * self.new_height * 3)
-            if not in_bytes:
+            expected_bytes = self.new_width * self.new_height * 3
+            in_bytes = self.process.stdout.read(expected_bytes)
+            if not in_bytes or len(in_bytes) != expected_bytes:
                 self.all_frames_decoded = True
                 self.process.stdout.close()
                 self.process.wait()
                 break
-            
+
             # Convert to numpy array and calculate timestamp
             frame = np.frombuffer(in_bytes, np.uint8).reshape([self.new_height, self.new_width, 3])
             timestamp = self.get_timestamp_with_frame_index(self._current_frame_index)

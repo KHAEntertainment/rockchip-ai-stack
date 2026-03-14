@@ -22,18 +22,27 @@ class TorchVisionVideoDecoder(BaseVideoDecoder):
         self.sample_fps = sample_fps
         self.longest_side_size = longest_side_size
         
+        if not isinstance(sample_fps, (int, float)) or sample_fps <= 0:
+            raise ValueError("sample_fps must be > 0")
+
         # Read entire video
         self.video_frames, _, info = read_video(video_path, pts_unit='sec', output_format='TCHW')
-        
-        # Get video information
-        self.original_fps = info['video_fps']
+
         self._total_frames = len(self.video_frames)
-        self._duration = self._total_frames / self.original_fps if self._total_frames else None
-        
+        if not self._total_frames:
+            raise ValueError(f"Video has no frames: {video_path}")
+
+        # Get video information
+        raw_fps = info.get('video_fps')
+        if not raw_fps or raw_fps <= 0:
+            raise ValueError(f"Video has invalid FPS ({raw_fps}): {video_path}")
+        self.original_fps = float(raw_fps)
+        self._duration = self._total_frames / self.original_fps
+
         # Get original dimensions from first frame
         first_frame = self.video_frames[0]
         _, self.original_height, self.original_width = first_frame.shape
-        
+
         # Calculate resize parameters if needed
         self.resize_size = None
         if longest_side_size is not None:
@@ -48,11 +57,11 @@ class TorchVisionVideoDecoder(BaseVideoDecoder):
                 self.scaled_height, self.scaled_width = self.original_height, self.original_width
         else:
             self.scaled_height, self.scaled_width = self.original_height, self.original_width
-        
+
         # Calculate sampling parameters
         self.sample_interval = 1.0 / sample_fps
         self.frame_interval = 1.0 / self.original_fps
-        
+
         # Precompute all target timestamps
         self.target_timestamps = [self.get_timestamp_with_frame_index(i) for i in range(int(self._duration * sample_fps) + 1)]
         
