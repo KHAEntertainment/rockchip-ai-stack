@@ -98,6 +98,10 @@ class ModelManager:
 
     def update_progress(self, job_id: str, current: int, total: int) -> None:
         """Update the progress of a job."""
+        # TODO: implement progress reporting — should persist progress to the job record
+        # (e.g., self._jobs[job_id]["progress"] = {"current": current, "total": total}),
+        # emit events (e.g., SSE / WebSocket), or update a database/UI so callers can
+        # poll or subscribe to real-time download/conversion progress.
         pass
 
     async def process_download(
@@ -234,7 +238,8 @@ class ModelManager:
             host_path = output_dir
             if host_path and isinstance(host_path, str) and host_path.startswith("/opt/models/"):
                 host_prefix = os.getenv("MODEL_PATH", "models")
-                host_path = host_path.replace("/opt/models/", f"{host_prefix}/")
+                suffix = host_path[len("/opt/models/"):]
+                host_path = os.path.join(host_prefix, suffix)
 
             logger.info("download_completed to host_path", host_path=host_path)
             return {
@@ -355,7 +360,8 @@ class ModelManager:
             host_path = output_dir
             if host_path and isinstance(host_path, str) and host_path.startswith("/opt/models/"):
                 host_prefix = os.getenv("MODEL_PATH", "models")
-                host_path = host_path.replace("/opt/models/", f"{host_prefix}/")
+                suffix = host_path[len("/opt/models/"):]
+                host_path = os.path.join(host_prefix, suffix)
 
             logger.info("download_completed to host_path", host_path=host_path)
             return {
@@ -477,7 +483,8 @@ class ModelManager:
                 host_path = model_path
                 if host_path and isinstance(host_path, str) and host_path.startswith("/opt/models/"):
                     host_prefix = os.getenv("MODEL_PATH", "models")
-                    host_path = host_path.replace("/opt/models/", f"{host_prefix}/")
+                    suffix = host_path[len("/opt/models/"):]
+                    host_path = os.path.join(host_prefix, suffix)
                     
                 logger.info("download_completed to host_path", host_path=host_path)
                 return {
