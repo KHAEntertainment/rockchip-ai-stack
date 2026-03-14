@@ -102,9 +102,21 @@ services/           ← all active services live here
   README.md         ← detailed docs
   INTEGRATION.md    ← startup order, env vars, smoke tests
 
+sample-applications/
+  chat-question-and-answer/       ← ported, ARM64-ready
+  chat-question-and-answer-core/  ← ported, ARM64-ready
+  video-search-and-summarization/ ← ported, ARM64-ready
+  document-summarization/         ← NOT PORTED: requires OpenVINO Model Server (OVMS), Intel hardware
+  plcopen-benchmark/              ← NOT PORTED: x86-only (MSR access, Intel ESE kernels, Intel iGPU tuning)
+  plcopen-databus/                ← chipset-agnostic, no changes needed
+
 libraries/          ← upstream Intel originals (reference only)
 frameworks/         ← upstream Intel originals (reference only)
 ```
+
+> **Note:** `sample-applications/document-summarization` and `sample-applications/plcopen-benchmark`
+> are retained from upstream but **do not run on RK3588**. See the open tracking issue for the
+> refactor plan.
 
 ---
 
