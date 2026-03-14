@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 import uvicorn
 from http import HTTPStatus
 from pathlib import Path
@@ -18,7 +19,7 @@ from typing import Annotated, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BeforeValidator
 
 from .config import Settings
@@ -140,64 +141,66 @@ async def ingest_document(
         HTTPException: Raised with 400 for unsupported file formats, 500 for storage or ingestion failures, or other appropriate HTTP status codes for error conditions.
     """
     try:
-        if files:
-            if not isinstance(files, list):
-                files = [files]
+        if not files:
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail="At least one file must be provided.",
+            )
 
-            for file in files:
-                file_name = os.path.basename(file.filename)
-                file_extension = os.path.splitext(file_name)[1].lower()
-                if file_extension not in config.SUPPORTED_FORMATS:
-                    raise HTTPException(
-                        status_code=HTTPStatus.BAD_REQUEST,
-                        detail=(
-                            f"Unsupported file format: {file_extension}. "
-                            "Supported formats are: pdf, txt, docx"
-                        ),
-                    )
+        for file in files:
+            file_name = os.path.basename(file.filename)
+            file_extension = os.path.splitext(file_name)[1].lower()
+            if file_extension not in config.SUPPORTED_FORMATS:
+                raise HTTPException(
+                    status_code=HTTPStatus.BAD_REQUEST,
+                    detail=(
+                        f"Unsupported file format: {file_extension}. "
+                        "Supported formats are: pdf, txt, docx"
+                    ),
+                )
 
-                logger.info(f"file: {file.filename} received for ingestion")
+            logger.info(f"file: {file.filename} received for ingestion")
 
-                # Persist to local store
+            # Persist to local store
+            try:
+                result = DataStore.upload_document(file)
+                bucket_name = result["bucket"]
+                uploaded_filename = result["file"]
+            except Exception as ex:
+                logger.error(f"Internal Error: {ex}")
+                raise HTTPException(
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    detail="Some unknown error occurred. Please try later!",
+                )
+
+            # Ingest into LanceDB — roll back the stored file on failure
+            # to keep the object store and vector store in sync.
+            temp_path: Path | None = None
+            try:
+                temp_path = await save_temp_file(
+                    file, bucket_name, uploaded_filename
+                )
+                logger.info(f"Temporary path of saved file: {temp_path}")
+                ingest_to_lancedb(doc_path=temp_path, bucket=bucket_name)
+            except Exception as e:
+                # Remove the file that was already written to the store so
+                # it does not become an orphan without matching embeddings.
                 try:
-                    result = DataStore.upload_document(file)
-                    bucket_name = result["bucket"]
-                    uploaded_filename = result["file"]
-                except Exception as ex:
-                    logger.error(f"Internal Error: {ex}")
-                    raise HTTPException(
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        detail="Some unknown error occurred. Please try later!",
+                    DataStore.remove_object(bucket_name, uploaded_filename)
+                    logger.info(
+                        f"Rolled back stored file {uploaded_filename} "
+                        "after ingestion failure"
                     )
-
-                # Ingest into LanceDB — roll back the stored file on failure
-                # to keep the object store and vector store in sync.
-                temp_path: Path | None = None
-                try:
-                    temp_path = await save_temp_file(
-                        file, bucket_name, uploaded_filename
-                    )
-                    logger.info(f"Temporary path of saved file: {temp_path}")
-                    ingest_to_lancedb(doc_path=temp_path, bucket=bucket_name)
-                except Exception as e:
-                    # Remove the file that was already written to the store so
-                    # it does not become an orphan without matching embeddings.
-                    try:
-                        DataStore.remove_object(bucket_name, uploaded_filename)
-                        logger.info(
-                            f"Rolled back stored file {uploaded_filename} "
-                            "after ingestion failure"
-                        )
-                    except Exception as rb_exc:
-                        logger.warning(f"Rollback failed: {rb_exc}")
-                    raise HTTPException(
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        detail=f"Unexpected error while ingesting data. Exception: {e}",
-                    )
-                finally:
-                    if temp_path is not None:
-                        Path(temp_path).unlink(missing_ok=True)
-                        logger.info("Temporary file cleaned up!")
+                except Exception as rb_exc:
+                    logger.warning(f"Rollback failed: {rb_exc}")
+                raise HTTPException(
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    detail=f"Unexpected error while ingesting data. Exception: {e}",
+                )
+            finally:
+                if temp_path is not None:
+                    Path(temp_path).unlink(missing_ok=True)
+                    logger.info("Temporary file cleaned up!")
 
         return {"status": 200, "message": "Data preparation succeeded"}
 
@@ -251,7 +254,14 @@ async def delete_documents(
                 detail="Failed to delete embeddings from vector database.",
             )
 
-        DataStore.delete_document(bucket_name, file_name, delete_all)
+        try:
+            DataStore.delete_document(bucket_name, file_name, delete_all)
+        except Exception as store_exc:
+            logger.warning(
+                f"Storage delete failed (orphaned file possible): "
+                f"bucket={bucket_name!r} file={file_name!r} delete_all={delete_all} "
+                f"error={store_exc}"
+            )
 
     except ValueError as err:
         logger.error(f"Error: {err}")
@@ -304,7 +314,6 @@ async def download_documents(
         file_stream = await DataStore.download_document(bucket_name, file_name)
 
         # Quote the filename and add RFC 5987 percent-encoded filename* for Unicode/special chars
-        import urllib.parse
         quoted_name = file_name.replace("\\", "\\\\").replace('"', '\\"')
         encoded_name = urllib.parse.quote(file_name, safe="")
         headers = {
@@ -484,10 +493,12 @@ async def ingest_zim():
     This endpoint is reserved so that upstream clients can detect the
     capability via the API without a 404.
     """
-    return {
+    import json
+    body = json.dumps({
         "status": "not_implemented",
         "note": "ZIM parser — custom build required",
-    }
+    })
+    return Response(content=body, status_code=501, media_type="application/json")
 
 
 # ---------------------------------------------------------------------------

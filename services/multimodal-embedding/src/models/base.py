@@ -61,7 +61,24 @@ class BaseEmbeddingModel(ABC):
         elif isinstance(config_modalities, str):
             self.supported_modalities = {config_modalities}
         else:
-            self.supported_modalities = set(config_modalities)
+            import collections.abc
+            if not isinstance(config_modalities, collections.abc.Iterable) or isinstance(config_modalities, (str, bytes)):
+                raise ValueError(
+                    f"config_modalities must be None, a str, or a non-string iterable of strings; "
+                    f"got {type(config_modalities).__name__!r}: {config_modalities!r}"
+                )
+            modalities = set(config_modalities)
+            if not modalities:
+                raise ValueError(
+                    f"config_modalities must not be empty; got {config_modalities!r}"
+                )
+            for elem in modalities:
+                if not isinstance(elem, str) or not elem:
+                    raise ValueError(
+                        f"Each modality must be a non-empty str; got {elem!r} in "
+                        f"config_modalities={config_modalities!r}"
+                    )
+            self.supported_modalities = modalities
 
     @abstractmethod
     def load_model(self) -> None:

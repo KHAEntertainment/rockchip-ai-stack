@@ -24,7 +24,7 @@ class FFmpegVideoDecoder(BaseVideoDecoder):
         self.longest_side_size = longest_side_size
         
         # Get video info
-        probe = ffmpeg.probe(video_path)
+        probe = ffmpeg.probe(self._video_path)
         video_info = next((s for s in probe['streams'] if s['codec_type'] == 'video'), None)
         if not video_info:
             raise ValueError("No video stream found")
