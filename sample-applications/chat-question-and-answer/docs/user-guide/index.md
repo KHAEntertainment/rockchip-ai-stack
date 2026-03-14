@@ -64,7 +64,7 @@ microservice are the options provided to run embedding models efficiently on tar
 hardware. OVMS is the default option due to performance benefits on Intel hardware.
 - **Reranking inference microservice**: Huggingface [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)
 microservice is the model serving choice available.
-- **Document ingestion microservice**: The sample [document ingestion](https://github.com/open-edge-platform/edge-ai-libraries/tree/main/microservices/document-ingestion/pgvector)
+- **Document ingestion microservice**: The sample [document ingestion](https://github.com/open-edge-platform/edge-ai-libraries/tree/main/services/document-ingestion)
 microservice allows ingestion of common document formats like PDF and DOC, and contents from
 web links. It supports a REST endpoint to ingest the documents. The ingestion process creates
 embeddings of the documents and stores them in the preferred vector database. The modular

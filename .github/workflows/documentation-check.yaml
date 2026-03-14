@@ -21,12 +21,9 @@ jobs:
     outputs:
       plcopen-motion-control_changed: ${{ steps.filter.outputs.plcopen-motion-control }}
       audio-analyzer_changed: ${{ steps.filter.outputs.audio-analyzer }}
-      dlstreamer-pipeline-server_changed: ${{ steps.filter.outputs.dlstreamer-pipeline-server }}
-      pgvector_changed: ${{ steps.filter.outputs.pgvector }}
       model-download_changed: ${{ steps.filter.outputs.model-download }}
       model-registry_changed: ${{ steps.filter.outputs.model-registry }}
       vector-retriever_changed: ${{ steps.filter.outputs.vector-retriever }}
-      time-series-analytics-docs_changed: ${{ steps.filter.outputs.time-series-analytics-docs }}
       chat-question-and-answer_changed: ${{ steps.filter.outputs.chat-question-and-answer }}
       chat-question-and-answer-core_changed: ${{ steps.filter.outputs.chat-question-and-answer-core }}
       document-summarization_changed: ${{ steps.filter.outputs.document-summarization }}
@@ -45,19 +42,13 @@ jobs:
             plcopen-motion-control:
               - 'libraries/edge-control-libraries/plcopen-motion-control/docs/**'
             audio-analyzer:
-              - 'microservices/audio-analyzer/docs/**'
-            dlstreamer-pipeline-server:
-              - 'microservices/dlstreamer-pipeline-server/docs/**'
-            pgvector:
-              - 'microservices/pgvector/docs/**'
+              - 'services/audio-analyzer/docs/**'
             model-download:
-              - 'microservices/model-download/docs/**'
+              - 'services/model-download/docs/**'
             model-registry:
-              - 'microservices/model-registry/docs/**'
+              - 'services/model-registry/docs/**'
             vector-retriever:
-              - 'microservices/vector-retriever/milvus/docs/**'
-            time-series-analytics-docs:
-              - 'microservices/time-series-analytics/docs/**'
+              - 'services/vector-retriever/milvus/docs/**'
             chat-question-and-answer:
               - 'sample-applications/chat-question-and-answer/docs/**'
             chat-question-and-answer-core:
@@ -85,25 +76,7 @@ jobs:
     if: ${{ needs.filter.outputs.audio-analyzer_changed == 'true' }}
     uses: ./.github/workflows/docs-reusable-workflow.yaml
     with:
-      docs_directory: microservices/audio-analyzer
-
-  build_dlstreamer-pipeline-server:
-    permissions:
-      contents: read # needed for actions/checkout
-    needs: filter
-    if: ${{ needs.filter.outputs.dlstreamer-pipeline-server_changed == 'true' }}
-    uses: ./.github/workflows/docs-reusable-workflow.yaml
-    with:
-      docs_directory: microservices/dlstreamer-pipeline-server
-
-  build_pgvector:
-    permissions:
-      contents: read # needed for actions/checkout
-    needs: filter
-    if: ${{ needs.filter.outputs.pgvector_changed == 'true' }}
-    uses: ./.github/workflows/docs-reusable-workflow.yaml
-    with:
-      docs_directory: microservices/pgvector
+      docs_directory: services/audio-analyzer
 
   build_model-download:
     permissions:
@@ -112,7 +85,7 @@ jobs:
     if: ${{ needs.filter.outputs.model-download_changed == 'true' }}
     uses: ./.github/workflows/docs-reusable-workflow.yaml
     with:
-      docs_directory: microservices/model-download
+      docs_directory: services/model-download
 
   build_model-registry:
     permissions:
@@ -121,7 +94,7 @@ jobs:
     if: ${{ needs.filter.outputs.model-registry_changed == 'true' }}
     uses: ./.github/workflows/docs-reusable-workflow.yaml
     with:
-      docs_directory: microservices/model-registry
+      docs_directory: services/model-registry
 
   build_vector-retriever:
     permissions:
@@ -130,16 +103,7 @@ jobs:
     if: ${{ needs.filter.outputs.vector-retriever_changed == 'true' }}
     uses: ./.github/workflows/docs-reusable-workflow.yaml
     with:
-      docs_directory: microservices/vector-retriever/milvus
-
-  build_time-series-analytics-docs:
-    permissions:
-      contents: read # needed for actions/checkout
-    needs: filter
-    if: ${{ needs.filter.outputs.time-series-analytics-docs_changed == 'true' }}
-    uses: ./.github/workflows/docs-reusable-workflow.yaml
-    with:
-      docs_directory: microservices/time-series-analytics
+      docs_directory: services/vector-retriever/milvus
 
   build_chat-question-and-answer:
     permissions:

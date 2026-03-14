@@ -15,7 +15,7 @@ on:
     branches:
       - main
     paths:
-      - 'microservices/model-download/**'
+      - 'services/model-download/**'
 
 jobs:
    
@@ -30,7 +30,7 @@ jobs:
       
       - name: Build Docker images
         run: |
-          docker build -f ./microservices/model-download/docker/Dockerfile -t model-download:latest ./microservices/model-download/
+          docker build -f ./services/model-download/docker/Dockerfile -t model-download:latest ./services/model-download/
       
       - name: Run Trivy Filesystem Scan
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
@@ -40,7 +40,7 @@ jobs:
           scan-scope: "all"  
           severity: "HIGH,CRITICAL" 
           format: "json"
-          scan_target: "microservices/model-download/"
+          scan_target: "services/model-download/"
           report_suffix: "-fs-model-download-CT7"
       
          
@@ -73,7 +73,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/model-download/docker/"
+          scan_target: "services/model-download/docker/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -99,7 +99,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/model-download/"
+          paths: "services/model-download/"
           report_suffix: "-bandit-model-download-CT161"
           
       - name: Upload Report
@@ -123,7 +123,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/model-download/"
+          paths: "services/model-download/"
           exclude_dirs: ".git,node_modules,venv,ui/test,tests"
           
       - name: Upload Report
@@ -161,7 +161,7 @@ jobs:
           
       - name: Scan for secrets
         run: |
-          gitleaks dir "microservices/model-download/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-model-download.json -r gitleaks-model-download.json || true
+          gitleaks dir "services/model-download/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-model-download.json -r gitleaks-model-download.json || true
           
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
@@ -185,12 +185,12 @@ jobs:
       - name: Install dependencies and pylint
         run: |
           pip install pylint uv
-          cd microservices/model-download/
+          cd services/model-download/
           uv pip install --system -e . || true
       
       - name: Run pylint
         run: |
-          cd microservices/model-download/
+          cd services/model-download/
           mkdir -p security-results
           echo "=== Pylint Scan Results ===" > security-results/pylint-report-model-download.txt
           echo "Scan Date: $(date)" >> security-results/pylint-report-model-download.txt
@@ -218,7 +218,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: pylint-report-model-download
-          path: microservices/model-download/security-results/pylint-report-model-download.txt
+          path: services/model-download/security-results/pylint-report-model-download.txt
 
   # ShellCheck scanning job
   shellcheck-scan:
@@ -241,7 +241,7 @@ jobs:
           echo "" >> security-results/shellcheck-report-model-download.txt
           
           # Find all shell scripts and check them
-          find microservices/model-download/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
+          find services/model-download/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
             echo "Checking: $file" >> security-results/shellcheck-report-model-download.txt
             shellcheck "$file" >> security-results/shellcheck-report-model-download.txt 2>&1 || true
             echo "---" >> security-results/shellcheck-report-model-download.txt
@@ -270,7 +270,7 @@ jobs:
     
       - name: Run unit tests
         run: |
-          cd microservices/model-download/
+          cd services/model-download/
           # Backend Coverage (including all production Python files)
           python3.12 -m venv model-download-venv
           source model-download-venv/bin/activate
@@ -289,4 +289,4 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: model-download-test-results
-          path: microservices/model-download/coverage/
+          path: services/model-download/coverage/

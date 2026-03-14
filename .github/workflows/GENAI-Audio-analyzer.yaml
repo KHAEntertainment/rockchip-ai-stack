@@ -16,7 +16,7 @@ on:
     branches:
       - main
     paths:
-      - 'microservices/audio-analyzer/**'
+      - 'services/audio-analyzer/**'
 
 jobs:
    
@@ -31,7 +31,7 @@ jobs:
       
       - name: Build Docker image
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           
           # Build audio analyzer microservice (Poetry-based FastAPI)
           docker build -f ./docker/Dockerfile -t audio-analyzer:latest .
@@ -50,7 +50,7 @@ jobs:
           scan-scope: "all"  
           severity: "HIGH,CRITICAL" 
           format: "json"
-          scan_target: "microservices/audio-analyzer/"
+          scan_target: "services/audio-analyzer/"
           report_suffix: "-fs-audio-analyzer-CT7"
       
          
@@ -83,7 +83,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/audio-analyzer/docker/"
+          scan_target: "services/audio-analyzer/docker/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -109,7 +109,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/audio-analyzer/"
+          paths: "services/audio-analyzer/"
           report_suffix: "-bandit-audio-analyzer-CT161"
           
       - name: Upload Report
@@ -133,7 +133,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/audio-analyzer/"
+          paths: "services/audio-analyzer/"
           exclude_dirs: ".git,tests,.pytest_cache,__pycache__,.venv"
           
       - name: Upload Report
@@ -171,7 +171,7 @@ jobs:
           
       - name: Scan for secrets
         run: |
-          gitleaks dir "microservices/audio-analyzer/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-audio-analyzer.json -r gitleaks-audio-analyzer.json || true
+          gitleaks dir "services/audio-analyzer/" -v -c ci/.gitleaks.toml --baseline-path ci/gitleaks_baselines/gitleaks-audio-analyzer.json -r gitleaks-audio-analyzer.json || true
           
       - name: Upload Gitleaks Report
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
@@ -198,13 +198,13 @@ jobs:
           
       - name: Install dependencies and pylint
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           poetry install --with dev
           poetry add --group dev pylint
       
       - name: Run pylint
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           mkdir -p security-results
           echo "=== Pylint Scan Results - Audio Analyzer ===" > security-results/pylint-report-audio-analyzer.txt
           echo "Scan Date: $(date)" >> security-results/pylint-report-audio-analyzer.txt
@@ -232,7 +232,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: pylint-report-audio-analyzer
-          path: microservices/audio-analyzer/security-results/pylint-report-audio-analyzer.txt
+          path: services/audio-analyzer/security-results/pylint-report-audio-analyzer.txt
 
   # Black code formatting check
   black-check:
@@ -253,12 +253,12 @@ jobs:
           
       - name: Install dependencies
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           poetry install --with dev
       
       - name: Run Black formatting check
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           mkdir -p security-results
           echo "=== Black Code Formatting Check Results ===" > security-results/black-check-report.txt
           echo "Scan Date: $(date)" >> security-results/black-check-report.txt
@@ -273,7 +273,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: black-check-report
-          path: microservices/audio-analyzer/security-results/black-check-report.txt
+          path: services/audio-analyzer/security-results/black-check-report.txt
 
   # isort import sorting check
   isort-check:
@@ -294,12 +294,12 @@ jobs:
           
       - name: Install dependencies
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           poetry install --with dev
       
       - name: Run isort import sorting check
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           mkdir -p security-results
           echo "=== isort Import Sorting Check Results ===" > security-results/isort-check-report.txt
           echo "Scan Date: $(date)" >> security-results/isort-check-report.txt
@@ -314,7 +314,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: isort-check-report
-          path: microservices/audio-analyzer/security-results/isort-check-report.txt
+          path: services/audio-analyzer/security-results/isort-check-report.txt
 
   # Flake8 linting check
   flake8-check:
@@ -335,12 +335,12 @@ jobs:
           
       - name: Install dependencies
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           poetry install --with dev
       
       - name: Run Flake8 linting check
         run: |
-          cd microservices/audio-analyzer/
+          cd services/audio-analyzer/
           mkdir -p security-results
           echo "=== Flake8 Linting Check Results ===" > security-results/flake8-check-report.txt
           echo "Scan Date: $(date)" >> security-results/flake8-check-report.txt
@@ -355,7 +355,7 @@ jobs:
         uses: actions/upload-artifact@de65e23aa2b7e23d713bb51fbfcb6d502f8667d8
         with:
           name: flake8-check-report
-          path: microservices/audio-analyzer/security-results/flake8-check-report.txt
+          path: services/audio-analyzer/security-results/flake8-check-report.txt
 
   # ShellCheck scanning job
   shellcheck-scan:
@@ -378,7 +378,7 @@ jobs:
           echo "" >> security-results/shellcheck-report-audio-analyzer.txt
           
           # Find all shell scripts and check them
-          find microservices/audio-analyzer/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
+          find services/audio-analyzer/ -type f \( -name "*.sh" -o -name "*.bash" \) -print0 | while IFS= read -r -d '' file; do
             echo "Checking: $file" >> security-results/shellcheck-report-audio-analyzer.txt
             shellcheck "$file" >> security-results/shellcheck-report-audio-analyzer.txt 2>&1 || true
             echo "---" >> security-results/shellcheck-report-audio-analyzer.txt

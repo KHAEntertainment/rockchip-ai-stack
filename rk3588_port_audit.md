@@ -46,7 +46,7 @@
 ---
 
 ## Component: Multimodal Embedding Serving
-**Path:** `microservices/multimodal-embedding-serving`
+**Path:** `services/multimodal-embedding`
 
 ### What It Does
 FastAPI microservice that generates vector embeddings from multimodal inputs (text, images, video frames). Supports multiple embedding model families (CLIP, CN-CLIP, MobileCLIP, SigLIP, BLIP-2, Qwen) via a factory/registry pattern. Each model family has a dedicated handler that can optionally use OpenVINO for accelerated inference.
@@ -111,7 +111,7 @@ FastAPI microservice that generates vector embeddings from multimodal inputs (te
 ---
 
 ## Component: Document Ingestion (PGVector)
-**Path:** `microservices/document-ingestion/pgvector`
+**Path:** `services/document-ingestion`
 
 ### What It Does
 FastAPI microservice that ingests documents (PDF, DOCX, TXT), splits them into chunks using LangChain text splitters, generates embeddings by calling an external OpenAI-compatible embedding endpoint, and stores the embeddings in PostgreSQL with the pgvector extension. Also handles document storage in MinIO object storage and URL content ingestion.
@@ -239,7 +239,7 @@ A RAG (Retrieval-Augmented Generation) chatbot sample application that combines 
 ---
 
 ## Component: Audio Analyzer
-**Path:** `microservices/audio-analyzer`
+**Path:** `services/audio-analyzer`
 
 ### What It Does
 FastAPI microservice for transcribing audio/video files using Whisper models. Implements a dual-backend architecture: pywhispercpp (whisper.cpp) for CPU inference using GGML models, and OpenVINO-GenAI for GPU-accelerated inference. Supports model management (auto-download from HuggingFace), audio extraction from video files, and SRT/TXT output formats.
@@ -308,7 +308,7 @@ FastAPI microservice for transcribing audio/video files using Whisper models. Im
 ---
 
 ## Component: VLM OpenVINO Serving
-**Path:** `microservices/vlm-openvino-serving`
+**Path:** `services/vlm-openvino-serving (removed)`
 
 ### What It Does
 OpenAI API-compliant FastAPI microservice for serving Vision Language Models (VLMs) using OpenVINO runtime. Supports multi-turn chat with image and video inputs, streaming responses via server-sent events, model compression (int4/int8/fp16), and models including Qwen-VL, SmolVLM, and others. Implements a QueueStreamer for async token generation and multiprocessing-based request management.

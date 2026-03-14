@@ -44,7 +44,7 @@ jobs:
           scan-scope: "all"  
           severity: "HIGH,CRITICAL" 
           format: "json"
-          scan_target: "microservices/multilevel-video-understanding/"
+          scan_target: "services/multilevel-video-understanding/"
           report_suffix: "-fs-multilevel-video-understanding-CT7"
 
 
@@ -77,7 +77,7 @@ jobs:
         uses: open-edge-platform/orch-ci/.github/actions/security/trivy@27276444a9bcf247a27369406686b689933bd1ff
         with:
           scan_type: "config"
-          scan_target: "microservices/multilevel-video-understanding/docker/"
+          scan_target: "services/multilevel-video-understanding/docker/"
           severity: "HIGH,CRITICAL"
           format: "json"
           misconfig_scanners: "dockerfile"
@@ -103,7 +103,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/multilevel-video-understanding"
+          paths: "services/multilevel-video-understanding"
           report_suffix: "-bandit-multilevel-video-understanding-CT161"
 
       - name: Upload Report
@@ -127,7 +127,7 @@ jobs:
           scan-scope: "all"  
           output-format: "txt" 
           fail-on-findings: "false"
-          paths: "microservices/multilevel-video-understanding"
+          paths: "services/multilevel-video-understanding"
           exclude_dirs: ".git,tests,.pytest_cache,__pycache__,.venv"
 
       - name: Upload Report
@@ -156,12 +156,12 @@ jobs:
           tar xzf coverity_tool.tgz --strip-components=1 -C cov-analysis
           COV_PATH="$(pwd)/cov-analysis/bin"
           export PATH="$COV_PATH:$PATH"
-          cd microservices/multilevel-video-understanding
+          cd services/multilevel-video-understanding
           coverity capture --dir cov-int --project-dir ./
           
       - name: Create tarball for upload
         run: |
-          cd microservices/multilevel-video-understanding
+          cd services/multilevel-video-understanding
           tar -czvf coverity_output.tgz -C . cov-int
           # Verify tarball contents
           echo "=== Tarball Contents ==="
@@ -171,7 +171,7 @@ jobs:
           
       - name: Upload to Coverity Scan
         run: |
-          cd microservices/multilevel-video-understanding
+          cd services/multilevel-video-understanding
           curl --form token=${{ secrets.MVU_COVERITY_TOKEN }} \
                --form email=${{ secrets.MVU_COVERITY_EMAIL }} \
                --form file=@coverity_output.tgz \
