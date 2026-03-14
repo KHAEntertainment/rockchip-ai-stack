@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, UploadFile
 from http import HTTPStatus
@@ -144,7 +144,7 @@ class LocalFileStore:
         bucket_dir = self._root / bucket_name
         return bucket_dir.is_dir()
 
-    def get_document_size(self, bucket: str = config.DEFAULT_BUCKET, file_name: str = None) -> int:
+    def get_document_size(self, bucket: str = config.DEFAULT_BUCKET, file_name: Optional[str] = None) -> int:
         """
         Get the size in bytes of the specified object in the given bucket.
         
@@ -190,7 +190,7 @@ class LocalFileStore:
         self,
         file_object: UploadFile,
         bucket: str = config.DEFAULT_BUCKET,
-        object_name: str = None,
+        object_name: Optional[str] = None,
     ) -> dict:
         """
         Store an uploaded file into the specified bucket and return its storage location.
@@ -219,7 +219,7 @@ class LocalFileStore:
     def delete_document(
         self,
         bucket: str = config.DEFAULT_BUCKET,
-        file_name: str = None,
+        file_name: Optional[str] = None,
         delete_all: bool = False,
     ) -> None:
         """Delete one or all files in *bucket*.
@@ -257,7 +257,7 @@ class LocalFileStore:
     async def download_document(
         self,
         bucket: str = config.DEFAULT_BUCKET,
-        file_name: str = None,
+        file_name: Optional[str] = None,
     ):
         """
         Provide a seekable in-memory byte stream for the specified object.

@@ -1,7 +1,7 @@
 import numpy as np
-import ast
 import subprocess
-from typing import List, Tuple, Optional    
+from fractions import Fraction
+from typing import List, Tuple, Optional
 
 from video_chunking.decoder import BaseVideoDecoder
 
@@ -29,7 +29,7 @@ class FFmpegVideoDecoder(BaseVideoDecoder):
 
         self.width = int(video_info['width'])
         self.height = int(video_info['height'])
-        self.original_fps = ast.literal_eval(video_info['avg_frame_rate'])
+        self.original_fps = float(Fraction(video_info['avg_frame_rate']))
         
         # Try to get total frames and duration
         try:

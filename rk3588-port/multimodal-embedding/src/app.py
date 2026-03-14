@@ -23,7 +23,7 @@ Endpoints:
 - /embeddings:         Generate embeddings
 """
 
-from typing import List, Union, Optional
+from typing import List, Literal, Union, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
@@ -95,51 +95,51 @@ async def startup_event():
 
 class TextInput(BaseModel):
     """Input model for text data."""
-    type: str
+    type: Literal["text"]
     text: Union[str, List[str]]
 
 
 class ImageUrlInput(BaseModel):
     """Input model for image URLs."""
-    type: str
+    type: Literal["image_url"]
     image_url: str
 
 
 class ImageBase64Input(BaseModel):
     """Input model for base64 encoded images."""
-    type: str
+    type: Literal["image_base64"]
     image_base64: str
 
 
 class VideoFramesInput(BaseModel):
     """Input model for video represented as individual frames."""
-    type: str
+    type: Literal["video_frames"]
     video_frames: List[Union[ImageUrlInput, ImageBase64Input]]
 
 
 class VideoUrlInput(BaseModel):
     """Input model for video URLs with segmentation configuration."""
-    type: str
+    type: Literal["video_url"]
     video_url: str
     segment_config: dict
 
 
 class VideoBase64Input(BaseModel):
     """Input model for base64 encoded videos."""
-    type: str
+    type: Literal["video_base64"]
     video_base64: str
     segment_config: dict
 
 
 class VideoFileInput(BaseModel):
     """Input model for local video files."""
-    type: str
+    type: Literal["video_file"]
     video_path: str
     segment_config: dict
 
 
 class FramesBatchInput(BaseModel):
-    type: str
+    type: Literal["frames_batch"]
     frames_manifest_path: str
 
 
@@ -222,7 +222,7 @@ class EmbeddingRequest(BaseModel):
         VideoBase64Input,
         VideoFileInput,
         FramesBatchInput,
-    ]
+    ] = Field(discriminator="type")
     encoding_format: str
 
 
@@ -234,21 +234,16 @@ class EmbeddingRequest(BaseModel):
 async def health_check() -> dict:
     """
     Report the application's health status and perform a runtime model health check.
-    
+
     Returns:
         dict: {"status": "healthy"} when the service and model are healthy.
-    
+
     Raises:
         HTTPException: with status code 500 when the model is not healthy.
     """
-    global health_status
-    if health_status:
+    if embedding_model is not None and embedding_model.check_health():
         return {"status": "healthy"}
-    elif embedding_model is not None and embedding_model.check_health():
-        health_status = True
-        return {"status": "healthy"}
-    else:
-        raise HTTPException(status_code=500, detail="Model is not healthy")
+    raise HTTPException(status_code=500, detail="Model is not healthy")
 
 
 @app.get("/models")

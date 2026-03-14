@@ -127,6 +127,12 @@ class RKNNModel:
     # ------------------------------------------------------------------
 
     def _load_npu(self) -> None:
+        """
+        Initialize and start the RKNNLite runtime by loading the compiled `.rknn` model referenced by `self.rknn_path`.
+
+        Raises:
+            NotImplementedError: Always raised because the RKNN (NPU) execution path is not implemented; set `USE_NPU=false` to use the ONNX CPU fallback instead.
+        """
         # TODO: RKNN — load compiled .rknn model via RKNNLite and init runtime
         # Example (not yet implemented):
         #   from rknnlite.api import RKNNLite
@@ -143,12 +149,6 @@ class RKNNModel:
         #       core_mask=core_map.get(self.npu_core, RKNNLite.NPU_CORE_0)
         #   )
         #   assert ret == 0, f"init_runtime failed: {ret}"
-        """
-        Initialize and start the RKNNLite runtime by loading the compiled `.rknn` model referenced by `self.rknn_path`.
-        
-        Raises:
-            NotImplementedError: Always raised because the RKNN (NPU) execution path is not implemented; set `USE_NPU=false` to use the ONNX CPU fallback instead.
-        """
         raise NotImplementedError(
             f"TODO: RKNN — RKNNModel NPU path not yet implemented "
             f"(rknn_path={self.rknn_path!r}). "
@@ -156,37 +156,37 @@ class RKNNModel:
         )
 
     def _run_npu(self, inputs: List[np.ndarray]) -> List[np.ndarray]:
+        """
+        Run inference on the RKNN NPU using the provided input tensors.
+
+        Parameters:
+            inputs (List[np.ndarray]): One array per model input, prepared for the RKNN runtime.
+
+        Returns:
+            List[np.ndarray]: One array per model output produced by the NPU.
+
+        Raises:
+            NotImplementedError: The RKNN NPU inference path is not yet implemented.
+        """
         # TODO: RKNN — call rknn.inference(inputs=[...]) and return outputs
         # Example (not yet implemented):
         #   outputs = self._rknn.inference(inputs=inputs)
         #   return [np.array(o) for o in outputs]
-        """
-        Run inference on the RKNN NPU using the provided input tensors.
-        
-        Parameters:
-            inputs (List[np.ndarray]): One array per model input, prepared for the RKNN runtime.
-        
-        Returns:
-            List[np.ndarray]: One array per model output produced by the NPU.
-        
-        Raises:
-            NotImplementedError: The RKNN NPU inference path is not yet implemented.
-        """
         raise NotImplementedError(
             "TODO: RKNN — RKNNModel._run_npu not yet implemented."
         )
 
     def _release_npu(self) -> None:
-        # TODO: RKNN — call rknn.release()
         """
         Release RKNN runtime resources and clear internal NPU state.
-        
+
         Intended to free any RKNNLite runtime resources (for example by calling the RKNN release method)
         and reset related internal attributes so the model can be reloaded or garbage-collected.
-        
+
         Raises:
             NotImplementedError: Always raised until RKNN integration for NPU resource release is implemented.
         """
+        # TODO: RKNN — call rknn.release()
         raise NotImplementedError(
             "TODO: RKNN — RKNNModel._release_npu not yet implemented."
         )

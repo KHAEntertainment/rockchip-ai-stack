@@ -1,6 +1,7 @@
 import numpy as np
 from torchvision.io import read_video
 from torchvision.transforms import functional as F
+from torchvision.transforms import InterpolationMode
 from typing import List, Tuple, Optional
 
 from video_chunking.decoder import BaseVideoDecoder
@@ -71,11 +72,9 @@ class TorchVisionVideoDecoder(BaseVideoDecoder):
     
     def _process_frame(self, frame):
         """Process a single frame (resize and convert format)."""
-        from torchvision.transforms import functional as F
-        
         if self.resize_size is not None:
-            frame = F.resize(frame.unsqueeze(0), self.resize_size, 
-                           interpolation=F.InterpolationMode.BILINEAR)
+            frame = F.resize(frame.unsqueeze(0), self.resize_size,
+                             interpolation=InterpolationMode.BILINEAR)
             frame = frame.squeeze(0)
         
         # Convert from CHW to HWC and then to numpy

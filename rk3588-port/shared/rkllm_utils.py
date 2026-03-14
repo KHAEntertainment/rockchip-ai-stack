@@ -169,10 +169,12 @@ class RKLLMEmbedder:
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.model_name_or_path,
             trust_remote_code=True,
+            cache_dir=self.model_dir,
         )
         self._model = AutoModel.from_pretrained(
             self.model_name_or_path,
             trust_remote_code=True,
+            cache_dir=self.model_dir,
         )
         self._model.eval()
         logger.info("RKLLMEmbedder: model loaded on CPU")
@@ -366,10 +368,12 @@ class RKLLMReranker:
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.model_name_or_path,
             trust_remote_code=True,
+            cache_dir=self.model_dir,
         )
         self._model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name_or_path,
             trust_remote_code=True,
+            cache_dir=self.model_dir,
         )
         self._model.eval()
         logger.info("RKLLMReranker: model loaded on CPU")
