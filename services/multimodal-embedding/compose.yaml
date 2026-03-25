@@ -1,0 +1,14 @@
+services:
+  multimodal-embedding:
+    build: .
+    ports:
+      - "8001:8001"
+    env_file: .env.example
+    volumes:
+      - ./models:/models
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
