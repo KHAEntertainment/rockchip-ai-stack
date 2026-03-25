@@ -46,9 +46,10 @@ COPY poetry.lock pyproject.toml ./
 # Install runtime (prod) deps. Uses $POETRY_VIRTUALENVS_IN_PROJECT to create venv.
 RUN poetry install --with ollama --without dev --without openvino
 
-# Install ollama and exclude nvidia gpu-related packages
+# Use Docker BuildKit TARGETARCH to automatically select correct Ollama binary
+ARG TARGETARCH
 ARG OLLAMA_VERSION=0.17.0
-ARG OLLAMA_ARCHIVE=linux-amd64
+ARG OLLAMA_ARCHIVE=linux-${TARGETARCH:-amd64}
 ARG OLLAMA_URL="https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-${OLLAMA_ARCHIVE}.tar.zst"
 
 RUN mkdir -p /tmp/ollama_lib \
