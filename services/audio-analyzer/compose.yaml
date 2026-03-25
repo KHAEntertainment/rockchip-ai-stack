@@ -1,0 +1,15 @@
+services:
+  audio-analyzer:
+    build: .
+    ports:
+      - "8002:8002"
+    env_file: .env.example
+    volumes:
+      - ./data:/data
+      - ./models:/models
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
