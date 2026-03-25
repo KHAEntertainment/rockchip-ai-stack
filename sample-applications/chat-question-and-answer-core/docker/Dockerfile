@@ -2,28 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 FROM python:3.11-slim AS python-base
 
-# Define a build-time variable to determine if GPU drivers should be installed
-ARG USE_GPU=false
-ARG INSTALL_DRIVER_VERSION="25.48.36300"
 ARG UID=1000
 ARG GID=1000
-
-RUN echo "USE_GPU is set to $USE_GPU"
-
-# Copy drivers and set execute permission on sh files
-COPY ./drivers/install_gpu_drivers.sh /tmp/drivers/install_gpu_drivers.sh
-RUN chmod +x /tmp/drivers/install_gpu_drivers.sh
-
-# Install GPU drivers if required
-RUN if [ "$USE_GPU" = "true" ]; then \
-    echo "Installing GPU drivers version $INSTALL_DRIVER_VERSION"; \
-    apt-get update && apt-get install -y --no-install-recommends ca-certificates libxml2; \
-    /tmp/drivers/install_gpu_drivers.sh; \
-    else \
-    echo "USE_GPU is set to false. No GPU drivers will be installed. Only CPU is supported."; \
-    apt-get clean && \
-    rm -rf /tmp/drivers /var/lib/apt/lists/* /tmp/*; \
-    fi
 
 # Setting env vars for python, pip and poetry
 ENV PYTHONUNBUFFERED=1 \

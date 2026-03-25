@@ -10,7 +10,7 @@ services:
 
     pipeline-manager:
         depends_on:
-            vdms-vector-db:
+            vector-db:
                 condition: service_started
             vdms-dataprep:
                 condition: service_healthy
@@ -30,7 +30,7 @@ services:
             context: ../search-ms
             dockerfile: docker/Dockerfile
         depends_on:
-            vdms-vector-db:
+            vector-db:
                 condition: service_started
             minio-service:
                 condition: service_healthy
@@ -42,12 +42,12 @@ services:
         ports:
             - '${VS_HOST_PORT}:8000'
         environment:
-            no_proxy: ${no_proxy},${MULTIMODAL_EMBEDDING_HOST},${VDMS_DATAPREP_HOST},${MINIO_HOST},${VDMS_VDB_HOST},${PM_HOST},localhost
-            no_proxy_env: ${no_proxy},${MULTIMODAL_EMBEDDING_HOST},${VDMS_DATAPREP_HOST},${MINIO_HOST},${VDMS_VDB_HOST},${PM_HOST},localhost
+            no_proxy: ${no_proxy},${MULTIMODAL_EMBEDDING_HOST},${VDMS_DATAPREP_HOST},${MINIO_HOST},${VECTOR_DB_HOST},${PM_HOST},localhost
+            no_proxy_env: ${no_proxy},${MULTIMODAL_EMBEDDING_HOST},${VDMS_DATAPREP_HOST},${MINIO_HOST},${VECTOR_DB_HOST},${PM_HOST},localhost
             http_proxy: ${http_proxy}
             https_proxy: ${https_proxy}
-            VDMS_VDB_HOST: ${VDMS_VDB_HOST}
-            VDMS_VDB_PORT: 55555
+            VECTOR_DB_HOST: ${VECTOR_DB_HOST:-vector-db}
+            VECTOR_DB_PORT: 19530
             EMBEDDINGS_ENDPOINT: ${MULTIMODAL_EMBEDDING_ENDPOINT}
             EMBEDDINGS_MODEL_NAME: ${EMBEDDING_MODEL_NAME}
             INDEX_NAME: ${VS_INDEX_NAME}
@@ -70,19 +70,17 @@ services:
         networks:
             - vs_network
 
-    vdms-vector-db:
-        image: intellabs/vdms:v2.12.0
-        ipc: host
-        environment:
-            - OVERRIDE_db_root_path=/db
-            - OVERRIDE_images_path=/db/images
-            - OVERRIDE_descriptors_path=/db/descriptors
-            - OVERRIDE_blobs_path=/db/blobs
-            - OVERRIDE_pmgd_path=/db/graph
+    vector-db:
+        image: milvus/milvus:latest
         ports:
-            - '${VDMS_VDB_HOST_PORT}:55555'
+            - '${VECTOR_DB_HOST_PORT:-19530}:19530'
+            - '9091:9091'
+        environment:
+            ETCD_USE_EMBED: "true"
+            ETCD_DATA_DIR: "/var/lib/milvus/etcd"
+            COMMON_STORAGETYPE: "local"
         volumes:
-            - vdms-db:/db
+            - milvus-data:/var/lib/milvus
         networks:
             - vs_network
 
@@ -90,15 +88,15 @@ services:
         image: ${REGISTRY:-}vdms-dataprep:${TAG:-latest}
         hostname: vdms-dataprep
         environment:
-            no_proxy: ${no_proxy},${VDMS_VDB_HOST},${MULTIMODAL_EMBEDDING_HOST},${MINIO_HOST},localhost
+            no_proxy: ${no_proxy},${VECTOR_DB_HOST},${MULTIMODAL_EMBEDDING_HOST},${MINIO_HOST},localhost
             http_proxy: ${http_proxy}
             https_proxy: ${https_proxy}
             # Basic app settings
             APP_HOST: vdms-dataprep
 
-            # VDMS Vector Database settings
-            VDMS_VDB_HOST: ${VDMS_VDB_HOST}
-            VDMS_VDB_PORT: 55555
+            # Milvus Vector Database settings
+            VECTOR_DB_HOST: ${VECTOR_DB_HOST:-vector-db}
+            VECTOR_DB_PORT: 19530
 
             # MinIO settings
             MINIO_ENDPOINT: ${MINIO_HOST}:80
@@ -112,16 +110,14 @@ services:
 
             # Embedding service settings
             MULTIMODAL_EMBEDDING_ENDPOINT: ${MULTIMODAL_EMBEDDING_ENDPOINT}
-            MULTIMODAL_EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME} # Used for both SDK and API modes
+            MULTIMODAL_EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME}
 
             # Embedding processing mode settings (SDK vs API)
             EMBEDDING_PROCESSING_MODE: ${EMBEDDING_PROCESSING_MODE:-sdk}
-            SDK_USE_OPENVINO: ${SDK_USE_OPENVINO:-true}
+            SDK_USE_OPENVINO: ${SDK_USE_OPENVINO:-false}
             VDMS_DATAPREP_DEVICE: ${VDMS_DATAPREP_DEVICE:-CPU}
-            OV_MODELS_DIR: ${OV_MODELS_DIR:-/app/ov_models}
             EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
             MAX_PARALLEL_WORKERS: ${MAX_PARALLEL_WORKERS:-}
-            OV_PERFORMANCE_MODE: ${OV_PERFORMANCE_MODE:-THROUGHPUT}
 
             # Frame processing settings
             FRAME_INTERVAL: ${FRAME_INTERVAL:-15}
@@ -148,7 +144,7 @@ services:
         ports:
             - '${VDMS_DATAPREP_HOST_PORT}:8000'
         depends_on:
-            vdms-vector-db:
+            vector-db:
                 condition: service_started
             multimodal-embedding-serving:
                 condition: service_healthy
@@ -167,14 +163,6 @@ services:
         volumes:
             - '${YOLOX_MODELS_VOLUME_NAME:-vdms-yolox-models}:${YOLOX_MODELS_MOUNT_PATH:-/app/models/yolox}'
             - data-prep:/tmp/dataprep
-            - ov-models:/home/appuser/.cache/huggingface # Share embedding models for SDK mode
-            - ov-models:${OV_MODELS_DIR:-/app/ov_models} # OpenVINO models directory for SDK mode
-        devices:
-            - /dev/dri:/dev/dri
-        group_add:
-            - ${USER_GROUP_ID:-1000}
-            - ${VIDEO_GROUP_ID:-44}
-            - ${RENDER_GROUP_ID:-1002}
         networks:
             - vs_network
 
@@ -190,19 +178,11 @@ services:
             http_proxy: ${http_proxy}
             https_proxy: ${https_proxy}
             EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME}
-            EMBEDDING_DEVICE: ${EMBEDDING_DEVICE}
-            EMBEDDING_USE_OV: ${EMBEDDING_USE_OV}
-            EMBEDDING_OV_MODELS_DIR: ${EMBEDDING_OV_MODELS_DIR:-/app/ov_models}
+            EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-CPU}
+            EMBEDDING_USE_OV: ${EMBEDDING_USE_OV:-false}
             DEFAULT_START_OFFSET_SEC: ${DEFAULT_START_OFFSET_SEC}
             DEFAULT_CLIP_DURATION: ${DEFAULT_CLIP_DURATION:--1}
             DEFAULT_NUM_FRAMES: ${DEFAULT_NUM_FRAMES}
-            OV_PERFORMANCE_MODE: ${OV_PERFORMANCE_MODE:-THROUGHPUT}
-        devices:
-            - /dev/dri:/dev/dri
-        group_add:
-            - ${USER_GROUP_ID:-1000}
-            - ${VIDEO_GROUP_ID:-44}
-            - ${RENDER_GROUP_ID:-1002}
         restart: unless-stopped
         healthcheck:
             test:
@@ -214,12 +194,10 @@ services:
         networks:
             - vs_network
         volumes:
-            - ov-models:/home/appuser/.cache/huggingface
             - data-prep:/tmp/dataprep
-            - ov-models:${EMBEDDING_OV_MODELS_DIR:-/app/ov_models}
 
 volumes:
-    vdms-db:
+    milvus-data:
         driver: local
     ov-models:
         driver: local
