@@ -11,6 +11,8 @@ x-chatqna-core-common: &chatqna-core-common
   build:
     context: ../
     dockerfile: docker/Dockerfile
+    args:
+      BUILDPLATFORM: linux/arm64
   environment:
     http_proxy: ${http_proxy}
     https_proxy: ${https_proxy}
@@ -25,22 +27,7 @@ x-chatqna-core-common: &chatqna-core-common
     - ${USER_GROUP_ID-1000}
 
 services:
-  nginx-default:
-    <<: *nginx-common
-    profiles:
-      - OPENVINO
-    depends_on:
-      - chatqna-core-ov-cpu
-      - chatqna-core-ui
-
-  nginx-gpu:
-    <<: *nginx-common
-    profiles:
-      - OPENVINO-GPU
-    depends_on:
-      - chatqna-core-ov-gpu
-      - chatqna-core-ui
-
+  # ARM64-compatible OLLAMA profile (the only supported backend for RK3588)
   nginx-ollama:
     <<: *nginx-common
     profiles:
@@ -48,28 +35,6 @@ services:
     depends_on:
       - chatqna-core-ollama
       - chatqna-core-ui
-
-  chatqna-core-ov-cpu:
-    <<: *chatqna-core-common
-    profiles:
-      - OPENVINO
-    container_name: chatqna-core-ov-cpu
-
-  chatqna-core-ov-gpu:
-    <<: *chatqna-core-common
-    profiles:
-      - OPENVINO-GPU
-    container_name: chatqna-core-ov-gpu
-    build:
-      context: ../
-      dockerfile: docker/Dockerfile
-      args:
-        USE_GPU: "true"
-    devices:
-      - /dev/dri:/dev/dri
-    group_add:
-      - ${RENDER_DEVICE_GID}
-      - ${USER_GROUP_ID-1000}
 
   chatqna-core-ollama:
     <<: *chatqna-core-common
@@ -79,6 +44,8 @@ services:
     build:
       context: ../
       dockerfile: docker/Dockerfile.ollama
+      args:
+        BUILDPLATFORM: linux/arm64
     environment:
       http_proxy: ${http_proxy}
       https_proxy: ${https_proxy}
@@ -90,6 +57,8 @@ services:
     build:
       context: ../ui/
       dockerfile: Dockerfile
+      args:
+        BUILDPLATFORM: linux/arm64
     environment:
       http_proxy: ${http_proxy}
       https_proxy: ${https_proxy}
