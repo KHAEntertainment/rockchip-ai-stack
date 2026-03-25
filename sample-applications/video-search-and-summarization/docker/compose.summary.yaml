@@ -10,7 +10,7 @@ services:
 
   pipeline-manager:
     depends_on:
-      vlm-openvino-serving:
+      vlm-serving:
         condition: service_healthy
       video-ingestion:
         condition: service_healthy
@@ -46,74 +46,27 @@ services:
       SEARCH_DATAPREP_ENDPOINT: ""
       SUMMARY_FEATURE: ${SUMMARY_FEATURE:-FEATURE_ON}
       SEARCH_FEATURE: ${SEARCH_FEATURE:-FEATURE_OFF}
-      USE_OVMS: "${USE_OVMS_CONFIG:-CONFIG_OFF}"
       WORKERS: ${WORKERS:-1}
 
-  vlm-openvino-serving:
-    image: ${REGISTRY:-}vlm-openvino-serving:${TAG:-latest}
+  vlm-serving:
+    image: ghcr.io/ggerganov/llama.cpp:server
     ipc: host
     ports:
-      - "${VLM_HOST_PORT}:8000"
+      - "${VLM_HOST_PORT:-8080}:8080"
+    volumes:
+      - "${VLM_MODEL_PATH:-./models}:/models"
     environment:
       no_proxy: ${no_proxy},${MINIO_HOST},localhost
-      no_proxy_env: ${no_proxy},${MINIO_HOST},localhost
       http_proxy: ${http_proxy}
       https_proxy: ${https_proxy}
-      VLM_MODEL_NAME: ${VLM_MODEL_NAME}
-      VLM_COMPRESSION_WEIGHT_FORMAT: ${VLM_COMPRESSION_WEIGHT_FORMAT}
-      VLM_DEVICE: ${VLM_DEVICE}
-      VLM_SEED: ${VLM_SEED}
-      WORKERS: ${WORKERS:-1}
-      HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN}
-      OV_CONFIG: ${OV_CONFIG}
-      VLM_LOG_LEVEL: ${VLM_LOG_LEVEL:-info}
-      OPENVINO_LOG_LEVEL: ${VLM_OPENVINO_LOG_LEVEL:-1}
-      VLM_ACCESS_LOG_FILE: ${VLM_ACCESS_LOG_FILE:-/dev/null}
-      VLM_TELEMETRY_PATH: ${VLM_TELEMETRY_PATH:-/opt/vlm_telemetry.jsonl}
-      VLM_TELEMETRY_MAX_RECORDS: ${VLM_TELEMETRY_MAX_RECORDS:-100}
+    command: -m /models/${VLM_MODEL_FILE} --host 0.0.0.0 --port 8080 --ctx-size 4096
     restart: unless-stopped
-    devices:
-      - ${DRI_MOUNT_PATH:-/dev/null}:/dev/dri
-    group_add:
-      - ${USER_GROUP_ID:-1000} 
-      - ${VIDEO_GROUP_ID:-44}    
-      - ${RENDER_GROUP_ID:-1002}
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 60
       start_period: 60s
-    volumes:
-      - ov-models:/home/appuser/.cache/huggingface
-      - ov-models:/app/ov-model
-    networks:
-      - vs_network
-
-  ovms-service:
-    image: openvino/model_server:2025.4.1
-    profiles:
-      - ovms
-    environment:
-      - no_proxy=${no_proxy},localhost
-      - http_proxy=${http_proxy}
-      - https_proxy=${https_proxy}
-    ulimits:
-      nofile:
-        soft: 16384
-        hard: 65536
-    ports:
-      - "${OVMS_HTTP_HOST_PORT}:80"
-      - "${OVMS_GRPC_HOST_PORT}:81"
-    volumes:
-      - "${OVMS_CONFIG_DIR}:/workspace:ro"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/v2/health/ready"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    command:
-      ["--port", "81", "--rest_port", "80", "--log_level", "DEBUG", "--config_path", "workspace/models/config.json"]
     networks:
       - vs_network
 
@@ -125,7 +78,11 @@ services:
     privileged: false
     tty: true
     ports:
-      - "${EVAM_PIPELINE_HOST_PORT}:8080"
+      - "${EVAM_PIPELINE_HOST_PORT:-8080}:8080"
+    # NOT_SUPPORTED_ON_ARM64: Video ingestion via DLStreamer is not supported on RK3588.
+    # Pre-ingested video clips can be provided directly to the pipeline manager.
+    profiles:
+      - x86-only
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/pipelines", "-o", "/dev/null"]
       interval: 60s
@@ -144,13 +101,11 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       RUN_MODE: EVA
-      # Default Detection and Classification Device
       DETECTION_DEVICE: ${EVAM_DEVICE}
       ADD_UTCTIME_TO_METADATA: true
       LSFEATURE_NAME: "EVAM"
-      HTTPS: false # Make it "true" to enable SSL/TLS secure mode, mount the generated certificates
-      MTLS_VERIFICATION: false # if HTTPS=true, enable/disable client certificate verification for mTLS
-      # Append pipeline name to a publisher topic
+      HTTPS: false
+      MTLS_VERIFICATION: false
       APPEND_PIPELINE_NAME_TO_PUBLISHER_TOPIC: false
       REST_SERVER_PORT: 8080
     entrypoint: ["./run.sh"]
@@ -158,24 +113,16 @@ services:
       - "/run/udev:/run/udev:ro"
       - "/dev:/dev"
       - "/tmp:/tmp"
-      - vol_evam_pipeline_root:/var/cache/pipeline_root:uid=1999,gid=1999
-      - ${OV_MODEL_DIR}:/home/pipeline-server/models
+      - "vol_evam_pipeline_root:/var/cache/pipeline_root:uid=1999,gid=1999"
+      - "${OV_MODEL_DIR}:/home/pipeline-server/models"
     group_add:
-      # render group ID for ubuntu 20.04 host OS
       - "109"
-      # render group ID for ubuntu 22.04 host OS
       - "110"
     device_cgroup_rules:
-      # Default run - device-cgroup-rule='c 189:* rmw'
-      # Selective rules can be applied for deployment
       - "c 189:* rmw"
       - "c 209:* rmw"
       - "a 189:* rwm"
     devices:
-      # Following devices under /dev filesystem will be needed based on usecase
-      # dri - GPU
-      # USB camera devices
-      # Selective mount can be done for deployment as mounting whole /dev is not recommended
       - "/dev:/dev"
     networks:
       - vs_network
@@ -184,27 +131,24 @@ services:
     image: ${REGISTRY:-}audio-analyzer:${TAG:-latest}
     hostname: audio-analyzer
     ports:
-      - "${AUDIO_HOST_PORT}:8000"
+      - "${AUDIO_HOST_PORT:-8000}:8000"
     volumes:
       - audio_analyzer_data:/data
-      - ${DRI_MOUNT_PATH:-/dev/null}:/dev/dri
     environment:
       - http_proxy
       - https_proxy
       - no_proxy=$no_proxy,${MINIO_HOST},localhost
       - DEBUG=false
-      - ENABLED_WHISPER_MODELS=${AUDIO_ENABLED_MODELS} # Comma-separated list of models to enable
-      - MAX_FILE_SIZE=${AUDIO_MAX_FILE} # 300MB
-      - USE_FP16=${USE_FP16:-true} # Use FP16 on GPUs
+      - ENABLED_WHISPER_MODELS=${AUDIO_ENABLED_MODELS}
+      - MAX_FILE_SIZE=${AUDIO_MAX_FILE}
+      - USE_FP16=${USE_FP16:-false}
       - MINIO_ENDPOINT=${MINIO_HOST}:80
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio} # can be minio or local
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-local}
     depends_on:
       minio-service:
         condition: service_healthy
-    devices:
-      - ${DRI_MOUNT_PATH:-/dev/null}:/dev/dri
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -218,9 +162,9 @@ services:
   rabbitmq-service:
     image: rabbitmq:3-management-alpine
     ports:
-      - "${RABBITMQ_AMQP_HOST_PORT}:5672" # AMQP port
-      - "${RABBITMQ_MANAGEMENT_UI_HOST_PORT}:15672" # Management UI
-      - "${RABBITMQ_MQTT_HOST_PORT}:1883" # MQTT (TCP) port
+      - "${RABBITMQ_AMQP_HOST_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_UI_HOST_PORT:-15672}:15672"
+      - "${RABBITMQ_MQTT_HOST_PORT:-1883}:1883"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 30s
@@ -242,8 +186,6 @@ services:
 
 volumes:
   audio_analyzer_data:
-    driver: local
-  ov-models:
     driver: local
   vol_evam_pipeline_root:
     driver: local

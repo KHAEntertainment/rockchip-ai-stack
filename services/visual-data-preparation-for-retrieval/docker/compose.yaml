@@ -16,18 +16,17 @@ services:
             --address ":9000" 
             --console-address ":9001"
 
-    vdms-vector-db:
-        image: intellabs/vdms:v2.10.0
+    vector-db:
+        image: milvus/milvus:latest
         environment:
-            - OVERRIDE_db_root_path=/db
-            - OVERRIDE_images_path=/db/images
-            - OVERRIDE_descriptors_path=/db/descriptors
-            - OVERRIDE_blobs_path=/db/blobs
-            - OVERRIDE_pmgd_path=/db/graph
+            ETCD_USE_EMBED: "true"
+            ETCD_DATA_DIR: "/var/lib/milvus/etcd"
+            COMMON_STORAGETYPE: "local"
         ports:
-            - '${VDMS_VDB_HOST_PORT:-6020}:55555'
-        depends_on:
-            - minio-server
+            - '${VECTOR_DB_HOST_PORT:-19530}:19530'
+            - '9091:9091'
+        volumes:
+            - milvus-data:/var/lib/milvus
 
     vdms-dataprep:
         build:
@@ -40,11 +39,11 @@ services:
             - https_proxy
             - no_proxy
             # Basic app settings
-            - APP_HOST=vdms-dataprep # Same as service name. Helps store a URL for video download in metadata.
+            - APP_HOST=vdms-dataprep
 
-            # VDMS Vector Database settings
-            - VDMS_VDB_HOST
-            - VDMS_VDB_PORT=55555
+            # Milvus Vector Database settings
+            - VECTOR_DB_HOST=${VECTOR_DB_HOST:-vector-db}
+            - VECTOR_DB_PORT=19530
 
             # MinIO settings
             - MINIO_ENDPOINT=${MINIO_HOST}:9000
@@ -58,14 +57,12 @@ services:
 
             # Embedding service settings
             - MULTIMODAL_EMBEDDING_ENDPOINT
-            - MULTIMODAL_EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-} # Used for both SDK and API modes
-            - OV_PERFORMANCE_MODE=${OV_PERFORMANCE_MODE:-LATENCY}
+            - MULTIMODAL_EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-}
 
             # Embedding processing mode settings (SDK vs API)
             - EMBEDDING_PROCESSING_MODE=${EMBEDDING_PROCESSING_MODE:-sdk}
-            - SDK_USE_OPENVINO=${SDK_USE_OPENVINO:-true}
+            - SDK_USE_OPENVINO=${SDK_USE_OPENVINO:-false}
             - VDMS_DATAPREP_DEVICE=${VDMS_DATAPREP_DEVICE:-CPU}
-            - OV_MODELS_DIR=${OV_MODELS_DIR:-/app/ov_models}
             - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-32}
             - MAX_PARALLEL_WORKERS=${MAX_PARALLEL_WORKERS:-}
 
@@ -96,10 +93,6 @@ services:
         volumes:
             - '${YOLOX_MODELS_VOLUME_NAME:-vdms-yolox-models}:${YOLOX_MODELS_MOUNT_PATH:-/app/models/yolox}'
             - data-prep:/tmp/dataprep
-            - ov-models:/home/appuser/.cache/huggingface # Share embedding models for SDK mode
-            - ov-models:${OV_MODELS_DIR:-/app/ov_models} # OpenVINO models directory for SDK mode
-        devices:
-            - /dev/dri:/dev/dri # Intel GPU device access for OpenVINO GPU acceleration
         depends_on:
             - minio-server
 
@@ -110,7 +103,7 @@ networks:
 volumes:
     vdms-yolox-models:
         driver: local
-    ov-models:
-        driver: local
     data-prep:
+        driver: local
+    milvus-data:
         driver: local
