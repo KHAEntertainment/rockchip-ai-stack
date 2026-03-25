@@ -20,7 +20,7 @@ endif
 
 build:
 	@# Help: Build code using colcon with complete oneAPI 2025.3 clean build environment
-	docker run --rm -t --platform linux/amd64 \
+	docker run --rm -t --platform linux/arm64 \
 		-v $(ROOT_DIR):/src \
 		-e DEBIAN_FRONTEND=noninteractive \
 		-e ROS_DISTRO=$(ROS_DISTRO) \
@@ -28,7 +28,7 @@ build:
 		-e https_proxy=${https_proxy} \
 		-e no_proxy=${no_proxy} \
 		--pull never \
-		amd64/ros:${ROS_DISTRO}-ros-base \
+		arm64v8/ros:${ROS_DISTRO}-ros-base \
 		bash -c "curl https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
 			gpg --yes --dearmor --output /usr/share/keyrings/oneapi-archive-keyring.gpg && \
 			echo \"deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main\" > /etc/apt/sources.list.d/oneAPI.list && \
@@ -60,7 +60,7 @@ tests:
 	@# Help: Run comprehensive tests (both OpenCV-free and OpenCV modes) in containerized environment  
 	@echo "=== Running Comprehensive Test Suite ==="
 	@echo "Testing both OpenCV-free (packaged) and OpenCV (full) variants..."
-	docker run --rm -t --platform linux/amd64 \
+	docker run --rm -t --platform linux/arm64 \
 		-v $(ROOT_DIR):/src \
 		-e DEBIAN_FRONTEND=noninteractive \
 		-e ROS_DISTRO=$(ROS_DISTRO) \
@@ -68,7 +68,7 @@ tests:
 		--device /dev/dri:/dev/dri \
 		-w /src \
 		-e no_proxy=${no_proxy} \
-		amd64/ros:${ROS_DISTRO}-ros-base \
+		arm64v8/ros:${ROS_DISTRO}-ros-base \
 		./scripts/test.sh
 
 clean:
@@ -77,7 +77,7 @@ clean:
 
 license-check:
 	@# Help: Perform a REUSE license check using docker container https://hub.docker.com/r/fsfe/reuse
-	docker run --rm --volume ${ROOT_DIR}:/data fsfe/reuse:5.0.2 lint
+	docker run --rm --platform linux/arm64 --volume ${ROOT_DIR}:/data fsfe/reuse:5.0.2 lint
 
 lint:
 	@# Help: Run all sub-linters using super-linter (using linters defined for this repo only)
@@ -93,7 +93,8 @@ lint:
 
 lint-all:
 	@# Help: Run super-linter over entire repository (auto-detects code to lint)
-	docker run --rm --platform linux/amd64 \
+	@# Note: super-linter does not have official arm64 images; may require QEMU emulation on ARM64 hosts
+	docker run --rm --platform linux/arm64 \
 		-e SHELL=/bin/bash \
 		-e RUN_LOCAL=true \
 		--env-file ".github/linters/super-linter.env" \
