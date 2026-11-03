@@ -33,7 +33,9 @@ PRUNE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --tier)  MAX_TIER="$2"; shift 2 ;;
+    --tier)
+      case "${2:-}" in ''|*[!0-9]*) echo "--tier needs a whole number, got: '${2:-}'" >&2; exit 2 ;; esac
+      MAX_TIER="$2"; shift 2 ;;
     --check) CHECK=1; shift ;;
     --prune) PRUNE=1; shift ;;
     --conf)  CONF="$2"; shift 2 ;;
@@ -45,15 +47,20 @@ done
 [ -f "$CONF" ] || { echo "catalog not found: $CONF" >&2; exit 2; }
 if [ "$CHECK" -eq 0 ]; then
   mkdir -p "$ZIM_DIR" || exit 1
+  # One writer per ZIM_DIR: runs share the manifest, .part files and library.xml.
+  exec 9>"$ZIM_DIR/.fetch-zims.lock"
+  flock -n 9 || { echo "!! another fetch-zims.sh run is active in $ZIM_DIR" >&2; exit 1; }
 fi
 
 LISTINGS="$(mktemp -d)"
+SUPERSEDED="$LISTINGS/superseded"   # files to delete once the new library is live
+: > "$SUPERSEDED"
 trap 'rm -rf "$LISTINGS"' EXIT
 
 # Folder listing, fetched once per folder.
 listing() {
   local folder="$1" f="$LISTINGS/$1.html"
-  [ -s "$f" ] || curl -fsSL "$BASE/$folder/" -o "$f" || return 1
+  [ -s "$f" ] || curl -fsSL "$BASE/$folder/" -o "$f" || { rm -f "$f"; return 1; }
   cat "$f"
 }
 
@@ -64,16 +71,25 @@ newest() {
   listing "$folder" | grep -oE "${re}_[0-9]{4}-[0-9]{2}[a-z]?\.zim" | sort -uV | tail -1
 }
 
+# Local dated builds of a prefix (never matches e.g. prefix_custom.zim).
+local_builds() {
+  local prefix="$1" f
+  for f in "$ZIM_DIR/${prefix}"_[0-9][0-9][0-9][0-9]-[0-9][0-9].zim \
+           "$ZIM_DIR/${prefix}"_[0-9][0-9][0-9][0-9]-[0-9][0-9][a-z].zim; do
+    [ -f "$f" ] && printf '%s\n' "$f"
+  done | sort -V
+}
+
 failed=0
 manifest="$ZIM_DIR/manifest.tsv.new"
 [ "$CHECK" -eq 1 ] || printf 'file\tprefix\ttier\tembed\tkind\n' > "$manifest"
 
-while read -r folder prefix tier embed kind _; do
+while read -r folder prefix tier embed kind _ || [ -n "${folder:-}" ]; do
   case "$folder" in ''|\#*) continue ;; esac
   if ! [ "$tier" -le "$MAX_TIER" ] 2>/dev/null; then
     # Out of scope for this run, but keep it in the manifest if it's on disk.
     if [ "$CHECK" -eq 0 ]; then
-      have="$(ls "$ZIM_DIR/${prefix}"_*.zim 2>/dev/null | sort -V | tail -1)"
+      have="$(local_builds "$prefix" | tail -1)"
       [ -n "$have" ] && printf '%s\t%s\t%s\t%s\t%s\n' "$(basename "$have")" "$prefix" "$tier" "$embed" "$kind" >> "$manifest"
     fi
     continue
@@ -100,43 +116,68 @@ while read -r folder prefix tier embed kind _; do
       echo "!! $latest download failed (re-run to resume)"
       failed=1; continue
     fi
-    # Kiwix publishes a .sha256 next to most files; verify when it exists.
-    if sum="$(curl -fsSL "$BASE/$folder/$latest.sha256" 2>/dev/null | awk '{print $1}')" && [ -n "$sum" ]; then
-      if ! echo "$sum  $dest.part" | sha256sum -c --status; then
-        echo "!! $latest checksum mismatch, removing partial file"
-        rm -f "$dest.part"; failed=1; continue
-      fi
-    fi
+    # Kiwix publishes a .sha256 next to most files. Only a 404 means "none
+    # published"; any other failure fails this file rather than skipping the check.
+    code="$(curl -sSL -o "$dest.sha256" -w '%{http_code}' "$BASE/$folder/$latest.sha256")" || code=000
+    case "$code" in
+      200)
+        sum="$(awk '{print $1}' "$dest.sha256")"
+        if [ -z "$sum" ] || ! echo "$sum  $dest.part" | sha256sum -c --status; then
+          echo "!! $latest checksum mismatch, removing partial file"
+          rm -f "$dest.part" "$dest.sha256"; failed=1; continue
+        fi ;;
+      404) ;;
+      *)
+        echo "!! $latest checksum request failed (HTTP $code); keeping .part, re-run to retry"
+        rm -f "$dest.sha256"; failed=1; continue ;;
+    esac
+    rm -f "$dest.sha256"
     mv "$dest.part" "$dest"
     echo "OK $latest"
   fi
 
   printf '%s\t%s\t%s\t%s\t%s\n' "$latest" "$prefix" "$tier" "$embed" "$kind" >> "$manifest"
 
-  for old in "$ZIM_DIR/${prefix}"_*.zim; do
-    [ -f "$old" ] && [ "$old" != "$dest" ] || continue
+  while read -r old; do
+    [ -n "$old" ] && [ "$old" != "$dest" ] || continue
+    # Never touch a local build that sorts newer than what the mirror offers.
+    [ "$(printf '%s\n%s\n' "$(basename "$old")" "$latest" | sort -V | tail -1)" = "$latest" ] || continue
     if [ "$PRUNE" -eq 1 ]; then
-      echo "-- removing superseded $(basename "$old")"; rm -f "$old"
+      echo "$old" >> "$SUPERSEDED"
     else
       echo "   note: older $(basename "$old") kept (use --prune to remove)"
     fi
-  done
+  done < <(local_builds "$prefix")
 done < "$CONF"
 
 [ "$CHECK" -eq 1 ] && exit $failed
 
 mv "$manifest" "$ZIM_DIR/manifest.tsv"
 
-# Rebuild the kiwix-serve library from what's on disk.
+# Rebuild the kiwix-serve library from what's on disk, leaving out files about
+# to be pruned. Publish only if every add succeeded, and prune only after that,
+# so library.xml never points at a deleted file.
 if command -v "$KIWIX_MANAGE" >/dev/null; then
   lib="$ZIM_DIR/library.xml"
   rm -f "$lib.new"
+  adds_ok=1
   for z in "$ZIM_DIR"/*.zim; do
-    [ -f "$z" ] && "$KIWIX_MANAGE" "$lib.new" add "$z" || true
+    [ -f "$z" ] || continue
+    grep -qxF "$z" "$SUPERSEDED" && continue
+    "$KIWIX_MANAGE" "$lib.new" add "$z" || { echo "!! $(basename "$z") not added to library"; adds_ok=0; }
   done
-  [ -f "$lib.new" ] && mv "$lib.new" "$lib" && echo ">> rebuilt $lib"
+  if [ "$adds_ok" -eq 1 ] && [ -f "$lib.new" ] && mv "$lib.new" "$lib"; then
+    echo ">> rebuilt $lib"
+    while read -r old; do
+      [ -n "$old" ] && echo "-- removing superseded $(basename "$old")" && rm -f "$old"
+    done < "$SUPERSEDED"
+  else
+    rm -f "$lib.new"
+    echo "!! library.xml left unchanged; nothing pruned"
+    failed=1
+  fi
 else
-  echo "!! $KIWIX_MANAGE not found; library.xml not rebuilt (install kiwix-tools)"
+  echo "!! $KIWIX_MANAGE not found; library.xml not rebuilt, nothing pruned (install kiwix-tools)"
   failed=1
 fi
 
